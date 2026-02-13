@@ -82,10 +82,10 @@ const ReportsView = (props) => {
         ))}
         {dateRange === 'custom' && (
           <div className="flex items-center gap-2 ml-2">
-            <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
+            <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} onKeyDown={noTypeDateKey}
               className="px-2 py-1 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-300" />
             <span className="text-neutral-400 text-xs">to</span>
-            <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
+            <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} onKeyDown={noTypeDateKey}
               className="px-2 py-1 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-300" />
           </div>
         )}
@@ -310,11 +310,11 @@ const ReportsView = (props) => {
                 {/* Date range */}
                 <div>
                   <label className="block text-[10px] text-neutral-400 uppercase tracking-wider mb-1">Check-in from</label>
-                  <input type="date" value={fDateFrom} onChange={e => setFDateFrom(e.target.value)} className={inputClass} />
+                  <input type="date" value={fDateFrom} onChange={e => setFDateFrom(e.target.value)} onKeyDown={noTypeDateKey} className={inputClass} />
                 </div>
                 <div>
                   <label className="block text-[10px] text-neutral-400 uppercase tracking-wider mb-1">Check-in to</label>
-                  <input type="date" value={fDateTo} onChange={e => setFDateTo(e.target.value)} className={inputClass} />
+                  <input type="date" value={fDateTo} onChange={e => setFDateTo(e.target.value)} onKeyDown={noTypeDateKey} className={inputClass} />
                 </div>
                 {/* Status */}
                 <div>

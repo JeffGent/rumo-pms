@@ -220,19 +220,28 @@ const NewReservationModal = (props) => {
                   className="w-full px-4 py-2.5 bg-neutral-50 border border-neutral-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
               </div>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-neutral-500 uppercase tracking-wider mb-2">Status</label>
-              <select id="newResStatus" defaultValue="confirmed"
-                className="w-full px-4 py-2.5 bg-neutral-50 border border-neutral-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all appearance-none">
-                <option value="confirmed">Confirmed</option>
-                <option value="option">Option</option>
-                <option value="blocked">Blocked</option>
-              </select>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-neutral-500 uppercase tracking-wider mb-2">Rate Plan</label>
+                <select id="newResRatePlan" defaultValue={ratePlans[0]?.id || ''}
+                  className="w-full px-4 py-2.5 bg-neutral-50 border border-neutral-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all appearance-none">
+                  {ratePlans.map(rp => <option key={rp.id} value={rp.id}>{rp.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-neutral-500 uppercase tracking-wider mb-2">Status</label>
+                <select id="newResStatus" defaultValue="confirmed"
+                  className="w-full px-4 py-2.5 bg-neutral-50 border border-neutral-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all appearance-none">
+                  <option value="confirmed">Confirmed</option>
+                  <option value="option">Option</option>
+                  <option value="blocked">Blocked</option>
+                </select>
+              </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-medium text-neutral-500 uppercase tracking-wider mb-2">Check-in</label>
-                <input id="newResCheckin" type="date" value={newResCheckin}
+                <input id="newResCheckin" type="date" value={newResCheckin} onKeyDown={noTypeDateKey}
                   onChange={(e) => {
                     setNewResCheckin(e.target.value);
                     if (e.target.value && !newResCheckout) {
@@ -245,7 +254,7 @@ const NewReservationModal = (props) => {
               </div>
               <div>
                 <label className="block text-xs font-medium text-neutral-500 uppercase tracking-wider mb-2">Check-out</label>
-                <input id="newResCheckout" type="date" value={newResCheckout}
+                <input id="newResCheckout" type="date" value={newResCheckout} onKeyDown={noTypeDateKey}
                   onChange={(e) => setNewResCheckout(e.target.value)}
                   className="w-full px-4 py-2.5 bg-neutral-50 border border-neutral-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
               </div>
@@ -272,6 +281,7 @@ const NewReservationModal = (props) => {
                 const checkoutStr = document.getElementById('newResCheckout')?.value;
                 const guestCount = parseInt(document.getElementById('newResGuests')?.value) || 2;
                 const notes = document.getElementById('newResNotes')?.value?.trim() || '';
+                const selectedRatePlanId = document.getElementById('newResRatePlan')?.value || ratePlans[0]?.id || '';
                 const rooms = isMultiRoom ? preSelectedRooms : [document.getElementById('newResRoom')?.value || preSelectedRoom];
 
                 if (!checkinStr || !checkoutStr) { setToastMessage('Please select check-in and check-out dates'); return; }
@@ -333,7 +343,8 @@ const NewReservationModal = (props) => {
                   blockReason: status === 'blocked' ? (notes || '') : '',
                   rooms: rooms.map(rm => ({
                     roomNumber: rm,
-                    roomType: 'Standard',
+                    roomType: getRoomTypeName(rm),
+                    ratePlanId: selectedRatePlanId,
                     status: status,
                     checkin: checkin.toISOString(),
                     checkout: checkout.toISOString(),

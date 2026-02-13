@@ -13,6 +13,11 @@ const fetchVIES = (countryCode, vatNum) => {
     .catch(() => fetch(`https://api.codetabs.com/v1/proxy?quest=${viesUrl}`).then(r => r.json()));
 };
 
+// Date inputs: calendar-only (no typing), click opens picker globally
+const noTypeDateKey = (e) => { if (!['Tab','Escape'].includes(e.key)) e.preventDefault(); };
+document.addEventListener('click', (e) => { if (e.target.matches('input[type="date"]')) try { e.target.showPicker(); } catch(ex) {} });
+document.addEventListener('keydown', (e) => { if (e.target.matches('input[type="date"]') && !['Tab','Escape'].includes(e.key)) e.preventDefault(); });
+
 const formatDate = (date) => {
   return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 };

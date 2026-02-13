@@ -26,7 +26,7 @@ const ModernHotelPMS = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activeFilter, setActiveFilter] = useState(() => {
     const hour = new Date().getHours();
-    return hour < 12 ? 'leaving' : 'arriving';
+    return hour < 12 ? 'departing' : 'arriving';
   });
   const [calendarActiveFilter, setCalendarActiveFilter] = useState('all');
   const [calColWidth, setCalColWidth] = useState(() => {
@@ -107,7 +107,7 @@ const ModernHotelPMS = () => {
   useEffect(() => {
     if (selectedReservation) {
       const ed = JSON.parse(JSON.stringify(selectedReservation));
-      // Migrate booker: name â†’ firstName/lastName
+      // Migrate booker: name → firstName/lastName
       if (ed.booker) {
         if (!ed.booker.firstName && ed.booker.name) {
           const parts = ed.booker.name.split(' ');
@@ -123,7 +123,7 @@ const ModernHotelPMS = () => {
       }
       const bookerFirst = ed.booker?.firstName || '';
       const bookerLast = ed.booker?.lastName || '';
-      // Migrate rooms: guestProfile â†’ guests[], and fill empty guest 1 from booker
+      // Migrate rooms: guestProfile → guests[], and fill empty guest 1 from booker
       (ed.rooms || []).forEach(room => {
         if (!room.guests || room.guests.length === 0) {
           if (room.guestProfile) {
@@ -140,7 +140,7 @@ const ModernHotelPMS = () => {
             ];
           }
         } else if (room.guests[0] && !room.guests[0].firstName && !room.guests[0].lastName) {
-          // Guests array exists but primary guest has no name â€” fill from booker
+          // Guests array exists but primary guest has no name — fill from booker
           room.guests[0].firstName = bookerFirst;
           room.guests[0].lastName = bookerLast;
           room.guests[0].email = room.guests[0].email || ed.booker?.email || '';
@@ -227,7 +227,7 @@ const ModernHotelPMS = () => {
     if (unlinkedCount > 0) parts.push(`${unlinkedCount} unlinked payment${unlinkedCount > 1 ? 's' : ''}`);
 
     if (parts.length > 0) {
-      setWarningToast({ message: parts.join(' Â· '), resId: res.id });
+      setWarningToast({ message: parts.join(' · '), resId: res.id });
     }
   };
 
@@ -326,7 +326,7 @@ const ModernHotelPMS = () => {
             res.optionExpiry = null;
             res.rooms.forEach(room => { room.status = 'cancelled'; room.optionExpiry = null; });
             res.activityLog = res.activityLog || [];
-            res.activityLog.push({ id: Date.now(), timestamp: now.getTime(), action: 'Option expired â†’ auto-cancelled', user: 'System' });
+            res.activityLog.push({ id: Date.now(), timestamp: now.getTime(), action: 'Option expired → auto-cancelled', user: 'System' });
             changed = true;
           }
         }
@@ -347,14 +347,14 @@ const ModernHotelPMS = () => {
             res.reservationStatus = 'cancelled';
             res.optionExpiry = null;
             res.activityLog = res.activityLog || [];
-            res.activityLog.push({ id: Date.now(), timestamp: now.getTime(), action: 'All rooms expired â†’ auto-cancelled', user: 'System' });
+            res.activityLog.push({ id: Date.now(), timestamp: now.getTime(), action: 'All rooms expired → auto-cancelled', user: 'System' });
             changed = true;
           }
         }
       });
       if (changed) {
         saveReservations();
-        setToastMessage('Option(s) expired â€” reservation auto-cancelled');
+        setToastMessage('Option(s) expired — reservation auto-cancelled');
         // If currently viewing an expired reservation, refresh the editing copy
         if (selectedReservation) {
           const fresh = reservations.find(r => r.id === selectedReservation.id);
@@ -542,7 +542,7 @@ const ModernHotelPMS = () => {
     )},
   ];
 
-  // â”€â”€ View Props bundle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── View Props bundle ────────────────────────────────────────────────
   const vp = {
     time, selectedDate, setSelectedDate, activePage, setActivePage,
     profileSelectedProfile, setProfileSelectedProfile, profileEditingProfile, setProfileEditingProfile,
@@ -719,7 +719,7 @@ const ModernHotelPMS = () => {
       <MessagesPanel {...vp} />
 
       {/* Toast Notification */}
-      {/* Keep prices popup â€” shown after any date change */}
+      {/* Keep prices popup — shown after any date change */}
       {pendingDateChange && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center" onClick={() => setPendingDateChange(null)}>
           <div className="absolute inset-0 bg-black/20" />

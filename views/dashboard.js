@@ -247,9 +247,6 @@ const DashboardView = (props) => {
 
       {/* Revenue Banner */}
       <div className="mb-6 md:mb-8 bg-gradient-to-br from-neutral-900 via-neutral-800 to-neutral-900 rounded-2xl md:rounded-3xl p-5 md:p-8 text-white shadow-2xl shadow-neutral-900/20 relative overflow-hidden">
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '40px 40px' }} />
-        </div>
         <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-4 md:gap-0">
           <div className="flex flex-col md:flex-row md:items-center gap-4 md:gap-12">
             <div>

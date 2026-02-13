@@ -12,12 +12,14 @@ const ReservationDetailView = (props) => {
     billRecipientOverride, setBillRecipientOverride, billCustomLabels, setBillCustomLabels,
     amendingInvoice, setAmendingInvoice, amendRecipient, setAmendRecipient,
     setToastMessage, focusValRef, addRoomRef, dragPaymentRef,
+    housekeepingStatus,
     showCheckoutWarning, setProfileSelectedProfile, setProfileEditingProfile,
     setProfileSourceReservation, setProfileSourceTab,
   } = props;
   const reservation = selectedReservation;
   const ed = editingReservation;
   if (!reservation || !ed) return null;
+  const [pricingOpen, setPricingOpen] = React.useState({});
 
   const pageLabels = { dashboard: 'Dashboard', calendar: 'Calendar', housekeeping: 'Housekeeping', fb: 'F&B', reports: 'Reports' };
   const edCheckin = ed.checkin ? new Date(ed.checkin) : reservation.checkin;
@@ -30,7 +32,10 @@ const ReservationDetailView = (props) => {
   });
   const minNights = Math.min(...roomNightCounts);
   const maxNights = Math.max(...roomNightCounts);
-  const nightsLabel = minNights === maxNights ? `${nightCount} night${nightCount > 1 ? 's' : ''}` : `${minNights}â€“${maxNights} nights`;
+  const nightsLabel = minNights === maxNights ? `${nightCount} night${nightCount > 1 ? 's' : ''}` : `${minNights}—${maxNights} nights`;
+  const roomRatePlanIds = (ed.rooms || []).map(r => r.ratePlanId).filter(Boolean);
+  const allSameRatePlan = roomRatePlanIds.length > 0 && roomRatePlanIds.every(id => id === roomRatePlanIds[0]);
+  const commonRatePlanName = allSameRatePlan ? (ratePlans.find(rp => rp.id === roomRatePlanIds[0])?.name || '') : '';
 
   const goBack = () => {
     setSelectedReservation(null);
@@ -65,7 +70,7 @@ const ReservationDetailView = (props) => {
     const oldVal = focusValRef.current;
     const newVal = e.target.value;
     if (oldVal !== newVal && (oldVal || newVal)) {
-      addToActivityLog(`${label}: "${oldVal || 'â€”'}" â†’ "${newVal || 'â€”'}"`);
+      addToActivityLog(`${label}: "${oldVal || '—'}" → "${newVal || '—'}"`);
     }
   };
 
@@ -107,7 +112,7 @@ const ReservationDetailView = (props) => {
     }
     if (oldStatus !== newStatus) {
       const label = { confirmed: 'Confirmed', option: 'Option', 'checked-in': 'Checked-in', 'checked-out': 'Checked-out', 'no-show': 'No-show', cancelled: 'Cancelled', blocked: 'Blocked' };
-      next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Room ${next.rooms[roomIndex].roomNumber}: ${label[oldStatus] || oldStatus} â†’ ${label[newStatus] || newStatus}`, user: 'Sophie' });
+      next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Room ${next.rooms[roomIndex].roomNumber}: ${label[oldStatus] || oldStatus} → ${label[newStatus] || newStatus}`, user: 'Sophie' });
     }
     setEditingReservation(next);
     if (newStatus === 'checked-out') showCheckoutWarning(next);
@@ -165,7 +170,7 @@ const ReservationDetailView = (props) => {
               <div className="flex flex-col gap-2 md:w-1/4">
                 <div className="flex items-center gap-3">
                   <select value={ed.reservationStatus} onChange={(e) => {
-                    const labels = { confirmed: 'Status â†’ Confirmed', option: 'Status â†’ Option', 'checked-in': 'Status â†’ Checked-in', 'checked-out': 'Status â†’ Checked-out', 'no-show': 'Status â†’ No-show', cancelled: 'Status â†’ Cancelled', blocked: 'Status â†’ Blocked' };
+                    const labels = { confirmed: 'Status → Confirmed', option: 'Status → Option', 'checked-in': 'Status → Checked-in', 'checked-out': 'Status → Checked-out', 'no-show': 'Status → No-show', cancelled: 'Status → Cancelled', blocked: 'Status → Blocked' };
                     updateStatus(e.target.value, labels[e.target.value] || 'Status changed');
                   }}
                     className={`px-3 py-1.5 rounded-lg text-xs font-semibold border-0 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-neutral-900 ${
@@ -199,15 +204,24 @@ const ReservationDetailView = (props) => {
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5 inline-block mr-2 -mt-1 text-slate-400"><circle cx="12" cy="12" r="10"/><path d="M4.93 4.93l14.14 14.14"/></svg>
                       {ed.blockReason || 'Blocked'}
                     </h2>
-                    <p className="text-sm text-neutral-500 mt-0.5">
-                      Room {ed.rooms[0]?.roomNumber || reservation.room} &middot; {nightsLabel} &middot; {formatDate(reservation.checkin)} &rarr; {formatDate(reservation.checkout)}
+                    <p className="text-xs text-neutral-400 mt-1">
+                      Room {ed.rooms[0]?.roomNumber || reservation.room}
+                    </p>
+                    <p className="text-xs text-neutral-400 mt-0.5">
+                      {nightsLabel} &middot; {formatDate(reservation.checkin)} &rarr; {formatDate(reservation.checkout)}
                     </p>
                   </>
                 ) : (
                   <>
                     <h2 className="text-xl md:text-2xl font-light text-neutral-900 font-serif">{ed.booker.firstName || ed.booker.name || ''} {ed.booker.lastName || ''}</h2>
-                    <p className="text-sm text-neutral-500 mt-0.5">
-                      Room {ed.rooms[0]?.roomNumber || reservation.room} &middot; {ed.rooms[0]?.roomType || reservation.type} &middot; {nightsLabel} &middot; {formatDate(reservation.checkin)} &rarr; {formatDate(reservation.checkout)}
+                    <p className="text-xs text-neutral-400 mt-1">
+                      {ed.rooms.length === 1
+                        ? <>{`Room ${ed.rooms[0]?.roomNumber}`} &middot; {ed.rooms[0]?.roomType}</>
+                        : <>{ed.rooms.length} rooms &middot; {ed.rooms.map(r => r.roomNumber).join(', ')}</>
+                      }
+                    </p>
+                    <p className="text-xs text-neutral-400 mt-0.5">
+                      {commonRatePlanName && <>{commonRatePlanName} &middot; </>}{nightsLabel} &middot; {formatDate(reservation.checkin)} &rarr; {formatDate(reservation.checkout)}
                     </p>
                   </>
                 )}
@@ -239,7 +253,7 @@ const ReservationDetailView = (props) => {
                       <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
                     </svg>
                   </button>
-                  <button onClick={() => setToastMessage('Switch booker â€” coming soon')}
+                  <button onClick={() => setToastMessage('Switch booker — coming soon')}
                     title="Switch booker"
                     className="p-2 border border-neutral-200 rounded-xl hover:bg-neutral-50 transition-colors flex items-center text-neutral-500">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
@@ -251,7 +265,7 @@ const ReservationDetailView = (props) => {
             </div>
           </div>
 
-          {/* Blocked View â€” replaces tabs when status is blocked */}
+          {/* Blocked View — replaces tabs when status is blocked */}
           {ed.reservationStatus === 'blocked' ? (
             <div className="bg-white border border-neutral-200 rounded-2xl p-5">
               <div className="flex items-center gap-3 mb-4">
@@ -281,16 +295,17 @@ const ReservationDetailView = (props) => {
           ) : (<>
 
           {/* Tabs */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex gap-1 md:gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+          <div className="flex items-center justify-between mb-4 border-b border-neutral-200">
+            <div className="flex items-center gap-1 overflow-x-auto">
               {tabs.map(tab => (
                 <button key={tab.id} onClick={() => { setReservationTab(tab.id); setAmendingInvoice(null); setAmendRecipient(null); }}
-                  className={`px-3 py-1.5 md:px-4 md:py-2 text-xs md:text-sm font-medium rounded-xl transition-all duration-200 whitespace-nowrap ${
+                  className={`px-4 py-2.5 text-sm font-medium transition-colors relative whitespace-nowrap ${
                     reservationTab === tab.id
-                      ? 'bg-neutral-900 text-white'
-                      : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100'
+                      ? 'text-neutral-900'
+                      : 'text-neutral-400 hover:text-neutral-600'
                   }`}>
                   {tab.label}
+                  {reservationTab === tab.id && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-neutral-900 rounded-full" />}
                 </button>
               ))}
             </div>
@@ -315,10 +330,10 @@ const ReservationDetailView = (props) => {
           {reservationTab === 'overview' && (
             <div className="space-y-4">
               <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden">
-                {/* Context row â€” stay info */}
-                <div className="px-5 py-3 bg-neutral-50 border-b border-neutral-200 flex items-center justify-between relative">
-                  <div className="flex items-center gap-2 text-sm text-neutral-600">
-                    <input type="date"
+                {/* Context row — stay info */}
+                <div className="px-4 py-2.5 bg-neutral-50 border-b border-neutral-200 flex items-center justify-between relative">
+                  <div className="flex items-center gap-2 text-xs text-neutral-600">
+                    <input type="date" onKeyDown={noTypeDateKey}
                       value={(() => { const ci = ed.checkin || (ed.rooms && ed.rooms.length > 0 ? ed.rooms.reduce((min, r) => { const d = new Date(r.checkin); return d < min ? d : min; }, new Date(ed.rooms[0].checkin)) : null); return ci ? (ci instanceof Date ? ci : new Date(ci)).toISOString().slice(0, 10) : ''; })()}
                       onChange={(e) => {
                         const newCheckin = new Date(e.target.value);
@@ -334,9 +349,9 @@ const ReservationDetailView = (props) => {
                         deriveReservationDates(next);
                         setPendingDateChange({ next, source: 'reservation' });
                       }}
-                      className="font-medium text-neutral-900 bg-transparent border-0 border-b border-dashed border-neutral-300 px-0 py-0 text-sm cursor-pointer focus:outline-none focus:border-neutral-900 w-[118px]" />
+                      className="font-medium text-neutral-900 bg-transparent border-0 border-b border-dashed border-neutral-300 px-0 py-0 text-xs cursor-pointer focus:outline-none focus:border-neutral-900 w-[110px]" />
                     <span className="text-neutral-400">&rarr;</span>
-                    <input type="date"
+                    <input type="date" onKeyDown={noTypeDateKey}
                       value={(() => { const co = ed.checkout || (ed.rooms && ed.rooms.length > 0 ? ed.rooms.reduce((max, r) => { const d = new Date(r.checkout); return d > max ? d : max; }, new Date(ed.rooms[0].checkout)) : null); return co ? (co instanceof Date ? co : new Date(co)).toISOString().slice(0, 10) : ''; })()}
                       onChange={(e) => {
                         const newCheckout = new Date(e.target.value);
@@ -352,10 +367,10 @@ const ReservationDetailView = (props) => {
                         deriveReservationDates(next);
                         setPendingDateChange({ next, source: 'reservation' });
                       }}
-                      className="font-medium text-neutral-900 bg-transparent border-0 border-b border-dashed border-neutral-300 px-0 py-0 text-sm cursor-pointer focus:outline-none focus:border-neutral-900 w-[118px]" />
-                    <span className="text-neutral-300">Â·</span>
+                      className="font-medium text-neutral-900 bg-transparent border-0 border-b border-dashed border-neutral-300 px-0 py-0 text-xs cursor-pointer focus:outline-none focus:border-neutral-900 w-[110px]" />
+                    <span className="text-neutral-300">·</span>
                     <span>{nightsLabel}</span>
-                    <span className="text-neutral-300">Â·</span>
+                    <span className="text-neutral-300">·</span>
                     <span>{reservation.guestCount} guest{reservation.guestCount !== 1 ? 's' : ''}</span>
                   </div>
                   {/* Keep prices popup is rendered globally below */}
@@ -386,48 +401,48 @@ const ReservationDetailView = (props) => {
                     {ed.eta ? (
                       <div className="flex items-center gap-1">
                         <input type="time" value={ed.eta} onChange={(e) => updateEd('eta', e.target.value)}
-                          className="px-2 py-1 bg-white border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
+                          className="px-2 py-1 bg-white border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
                         <button onClick={() => updateEd('eta', '')} className="text-neutral-300 hover:text-neutral-500 transition-colors">
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
                         </button>
                       </div>
                     ) : (
                       <button onClick={() => updateEd('eta', '14:00')}
-                        className="px-2 py-1 text-sm text-neutral-400 bg-white border border-neutral-200 rounded-lg hover:border-neutral-300 hover:text-neutral-600 transition-all">
+                        className="px-2 py-1 text-xs text-neutral-400 bg-white border border-neutral-200 rounded-lg hover:border-neutral-300 hover:text-neutral-600 transition-all">
                         Unknown
                       </button>
                     )}
                   </div>
                 </div>
 
-                {/* Booker + Booking Details â€” 2 columns */}
+                {/* Booker + Booking Details — 2 columns */}
                 <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-neutral-100">
                   {/* Booker */}
-                  <div className="p-5 space-y-3">
+                  <div className="p-4 pt-3 space-y-2">
                     <div className="text-xs font-medium text-neutral-400 uppercase tracking-wider">Booker</div>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-1.5">
                       <input value={ed.booker.firstName || ''} onChange={(e) => updateEd('booker.firstName', e.target.value)}
                         onFocus={onFocusTrack} onBlur={onBlurLog('Booker first name')}
                         placeholder="First name"
-                        className="px-3 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
+                        className="px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
                       <input value={ed.booker.lastName || ''} onChange={(e) => updateEd('booker.lastName', e.target.value)}
                         onFocus={onFocusTrack} onBlur={onBlurLog('Booker last name')}
                         placeholder="Last name"
-                        className="px-3 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
+                        className="px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
                     </div>
                     <input type="email" value={ed.booker.email} onChange={(e) => updateEd('booker.email', e.target.value)}
                       onFocus={onFocusTrack} onBlur={onBlurLog('Booker email')}
                       placeholder="Email"
-                      className="w-full px-3 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
-                    <div className="flex gap-2">
+                      className="w-full px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
+                    <div className="flex gap-1.5">
                       <input type="tel" value={ed.booker.phone} onChange={(e) => updateEd('booker.phone', e.target.value)}
                         onFocus={onFocusTrack} onBlur={onBlurLog('Booker phone')}
                         placeholder="Phone"
-                        className="flex-1 px-3 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
+                        className="flex-1 px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
                       {ed.booker.phone && (
                         <a href={`https://wa.me/${ed.booker.phone.replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer"
                           title="WhatsApp"
-                          className="flex items-center justify-center w-8 h-8 rounded-lg border border-neutral-200 hover:bg-emerald-50 hover:border-emerald-300 transition-colors flex-shrink-0">
+                          className="flex items-center justify-center w-7 h-7 rounded-lg border border-neutral-200 hover:bg-emerald-50 hover:border-emerald-300 transition-colors flex-shrink-0">
                           <svg viewBox="0 0 24 24" fill="#25D366" className="w-4 h-4">
                             <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
                           </svg>
@@ -437,7 +452,7 @@ const ReservationDetailView = (props) => {
                   </div>
 
                   {/* Booker Details */}
-                  <div className="p-5 space-y-3">
+                  <div className="p-4 pt-3 space-y-2">
                     {/* Billing Recipient */}
                     {(() => {
                       const br = ed.billingRecipient || { type: 'individual', companyId: null, name: '', vatNumber: '', peppolId: '', address: '', zip: '', city: '', country: '', email: '', phone: '', reference: '' };
@@ -472,25 +487,25 @@ const ReservationDetailView = (props) => {
                             </div>
                           </div>
                           {br.type === 'individual' && (
-                            <div className="space-y-2">
+                            <div className="space-y-1.5">
                               <input value={br.address} onChange={(e) => updateBR('address', e.target.value)} placeholder="Address"
-                                className="w-full px-3 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
-                              <div className="grid grid-cols-3 gap-2">
+                                className="w-full px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
+                              <div className="grid grid-cols-3 gap-1.5">
                                 <input value={br.zip} onChange={(e) => updateBR('zip', e.target.value)} placeholder="Zip"
-                                  className="px-3 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
+                                  className="px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
                                 <input value={br.city} onChange={(e) => updateBR('city', e.target.value)} placeholder="City"
-                                  className="px-3 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
+                                  className="px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
                                 <input value={br.country} onChange={(e) => updateBR('country', e.target.value)} placeholder="Country"
-                                  className="px-3 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
+                                  className="px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
                               </div>
                             </div>
                           )}
                           {br.type === 'company' && (
-                            <div className="space-y-2">
+                            <div className="space-y-1.5">
                               <div className="relative">
                                 <input value={br.name} onChange={(e) => { updateBRMulti(br.companyId ? { name: e.target.value, companyId: null } : { name: e.target.value }); }}
                                   placeholder="Search or type company name..."
-                                  className="w-full px-3 py-1.5 pr-8 bg-neutral-50 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
+                                  className="w-full px-2.5 py-1.5 pr-8 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
                                 {!br.companyId && br.name && (
                                   <button onClick={() => {
                                     const newId = Math.max(0, ...companyRegistry.map(c => c.id)) + 1;
@@ -510,7 +525,7 @@ const ReservationDetailView = (props) => {
                                   <div className="absolute z-20 left-0 right-0 top-full mt-1 bg-white border border-neutral-200 rounded-lg shadow-lg overflow-hidden">
                                     {companyMatches.map(c => (
                                       <button key={c.id} onClick={() => selectCompany(c)}
-                                        className="w-full px-3 py-2 text-left text-sm hover:bg-neutral-50 flex items-center justify-between">
+                                        className="w-full px-2.5 py-1.5 text-left text-xs hover:bg-neutral-50 flex items-center justify-between">
                                         <span className="font-medium text-neutral-900">{c.name}</span>
                                         <span className="text-xs text-neutral-400">{c.vatNumber}</span>
                                       </button>
@@ -518,7 +533,7 @@ const ReservationDetailView = (props) => {
                                   </div>
                                 )}
                               </div>
-                              <div className="grid grid-cols-2 gap-2">
+                              <div className="grid grid-cols-2 gap-1.5">
                                 <div className="relative">
                                   <input value={br.vatNumber} onChange={(e) => {
                                       const vat = e.target.value;
@@ -527,7 +542,7 @@ const ReservationDetailView = (props) => {
                                       updateBRMulti({ vatNumber: vat, peppolId, _viesValid: undefined });
                                     }}
                                     placeholder="VAT number"
-                                    className="w-full px-3 py-1.5 pr-8 bg-neutral-50 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
+                                    className="w-full px-2.5 py-1.5 pr-8 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
                                   {/* VIES lookup button / status */}
                                   {br.vatNumber && br.vatNumber.length >= 6 && (
                                     br._viesValid === 'loading' ? (
@@ -585,29 +600,29 @@ const ReservationDetailView = (props) => {
                                   )}
                                 </div>
                                 <input value={br.peppolId} onChange={(e) => updateBR('peppolId', e.target.value)} placeholder="Peppol ID"
-                                  className="px-3 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
+                                  className="px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
                               </div>
                               <input value={br.address} onChange={(e) => updateBR('address', e.target.value)} placeholder="Address"
-                                className="w-full px-3 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
-                              <div className="grid grid-cols-3 gap-2">
+                                className="w-full px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
+                              <div className="grid grid-cols-3 gap-1.5">
                                 <input value={br.zip} onChange={(e) => updateBR('zip', e.target.value)} placeholder="Zip"
-                                  className="px-3 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
+                                  className="px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
                                 <input value={br.city} onChange={(e) => updateBR('city', e.target.value)} placeholder="City"
-                                  className="px-3 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
+                                  className="px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
                                 <input value={br.country} onChange={(e) => updateBR('country', e.target.value)} placeholder="Country"
-                                  className="px-3 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
+                                  className="px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
                               </div>
                               <input value={br.email} onChange={(e) => updateBR('email', e.target.value)} placeholder="Billing email"
-                                className="w-full px-3 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
+                                className="w-full px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
                             </div>
                           )}
                         </div>
                       );
                     })()}
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-1.5">
                       <div className="relative">
-                        <select value={ed.bookedVia} onChange={(e) => { const nv = e.target.value; if (nv !== ed.bookedVia) updateEd('bookedVia', nv, `Booked via: ${ed.bookedVia} â†’ ${nv}`); }}
-                          className="w-full px-3 py-1.5 pr-7 bg-neutral-50 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all appearance-none">
+                        <select value={ed.bookedVia} onChange={(e) => { const nv = e.target.value; if (nv !== ed.bookedVia) updateEd('bookedVia', nv, `Booked via: ${ed.bookedVia} → ${nv}`); }}
+                          className="w-full px-2.5 py-1.5 pr-7 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all appearance-none">
                           <option value="direct">Direct</option>
                           <option value="booking.com">Booking.com</option>
                           <option value="expedia">Expedia</option>
@@ -619,8 +634,8 @@ const ReservationDetailView = (props) => {
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-neutral-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none"><polyline points="6 9 12 15 18 9"/></svg>
                       </div>
                       <div className="relative">
-                        <select value={ed.stayPurpose} onChange={(e) => { const nv = e.target.value; if (nv !== ed.stayPurpose) updateEd('stayPurpose', nv, `Stay purpose: ${ed.stayPurpose} â†’ ${nv}`); }}
-                          className="w-full px-3 py-1.5 pr-7 bg-neutral-50 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all appearance-none">
+                        <select value={ed.stayPurpose} onChange={(e) => { const nv = e.target.value; if (nv !== ed.stayPurpose) updateEd('stayPurpose', nv, `Stay purpose: ${ed.stayPurpose} → ${nv}`); }}
+                          className="w-full px-2.5 py-1.5 pr-7 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all appearance-none">
                           <option value="leisure">Leisure</option>
                           <option value="business">Business</option>
                           <option value="mice">MICE</option>
@@ -631,11 +646,11 @@ const ReservationDetailView = (props) => {
                   </div>
                 </div>
 
-                {/* Notes â€” full width bottom */}
-                <div className="px-5 py-3 border-t border-neutral-100">
+                {/* Notes — full width bottom */}
+                <div className="px-4 py-2.5 border-t border-neutral-100">
                   <textarea value={ed.notes} onChange={(e) => updateEd('notes', e.target.value)}
-                    rows="2" placeholder="Notes..."
-                    className="w-full px-3 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all resize-none" />
+                    rows="1" placeholder="Notes..."
+                    className="w-full px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all resize-none" />
                 </div>
               </div>
 
@@ -709,7 +724,7 @@ const ReservationDetailView = (props) => {
                         const curr = reservations.find(r => r.bookingRef === ed.bookingRef);
                         if (curr) {
                           curr.activityLog = curr.activityLog || [];
-                          curr.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Credit card received and saved to booker profile (â€¢â€¢â€¢â€¢ ${simCard.last4})`, user: 'System' });
+                          curr.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Credit card received and saved to booker profile (•••• ${simCard.last4})`, user: 'System' });
                           saveReservations();
                         }
                       }, 8000);
@@ -719,7 +734,7 @@ const ReservationDetailView = (props) => {
                       }`}>
                       <Icons.CreditCard className="w-4 h-4 text-blue-600" />
                       <span className="text-xs font-medium text-neutral-900">
-                        {ed._ccRequestSent && !bookerProfiles.find(b => (b.email && b.email === ed.booker?.email) || (b.firstName === ed.booker?.firstName && b.lastName === ed.booker?.lastName))?.creditCard ? 'Card request sent â€” awaiting response...' : 'Request Credit Card'}
+                        {ed._ccRequestSent && !bookerProfiles.find(b => (b.email && b.email === ed.booker?.email) || (b.firstName === ed.booker?.firstName && b.lastName === ed.booker?.lastName))?.creditCard ? 'Card request sent — awaiting response...' : 'Request Credit Card'}
                       </span>
                     </button>
                   </div>
@@ -898,32 +913,65 @@ const ReservationDetailView = (props) => {
             <div className="space-y-4">
 
               {/* Quick Edit Grid */}
-              {roomGridMode && (
+              {roomGridMode && (() => {
+                const allRoomsList = getAllRooms();
+                const flatEntries = buildFlatRoomEntries(reservations);
+                const getAvailableRooms = (ri) => {
+                  const room = ed.rooms[ri];
+                  const usedByOthers = ed.rooms.filter((_, i) => i !== ri).map(r => r.roomNumber);
+                  const roomCi = room.checkin ? new Date(room.checkin) : new Date(ed.checkin || reservation.checkin);
+                  const roomCo = room.checkout ? new Date(room.checkout) : new Date(ed.checkout || reservation.checkout);
+                  return allRoomsList.filter(rm => {
+                    if (rm === room.roomNumber) return true;
+                    if (usedByOthers.includes(rm)) return false;
+                    return !flatEntries.some(r => {
+                      if (r.room !== rm || r.id === reservation.id) return false;
+                      const st = r.reservationStatus || 'confirmed';
+                      if (st === 'cancelled' || st === 'no-show') return false;
+                      return new Date(r.checkin) < roomCo && new Date(r.checkout) > roomCi;
+                    });
+                  });
+                };
+                const gridTotal = ed.rooms.reduce((s, r) => s + (r.priceType === 'fixed' ? (r.fixedPrice || 0) : r.nightPrices.reduce((ns, n) => ns + (n.amount || 0), 0)), 0);
+                return (
                 <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="w-full">
                       <thead>
                         <tr className="bg-neutral-50 border-b border-neutral-200">
-                          <th className="px-3 py-2.5 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-16">Room</th>
-                          <th className="px-3 py-2.5 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-28">Status</th>
-                          <th className="px-3 py-2.5 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-24">Type</th>
-                          <th className="px-3 py-2.5 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Guest Name</th>
-                          <th className="px-3 py-2.5 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-24">Pricing</th>
-                          <th className="px-3 py-2.5 text-right text-xs font-medium text-neutral-500 uppercase tracking-wider w-28">Price (â‚¬)</th>
+                          <th className="px-2.5 py-1.5 text-left text-[10px] font-medium text-neutral-400 uppercase tracking-wider w-20">Room</th>
+                          <th className="px-2.5 py-1.5 text-left text-[10px] font-medium text-neutral-400 uppercase tracking-wider w-28">Status</th>
+                          <th className="px-2.5 py-1.5 text-left text-[10px] font-medium text-neutral-400 uppercase tracking-wider">Guest</th>
+                          <th className="px-2.5 py-1.5 text-left text-[10px] font-medium text-neutral-400 uppercase tracking-wider w-20">Pricing</th>
+                          <th className="px-2.5 py-1.5 text-right text-[10px] font-medium text-neutral-400 uppercase tracking-wider w-24">Price (€)</th>
                         </tr>
                       </thead>
                       <tbody>
                         {ed.rooms.map((room, ri) => {
                           const guestCount = room.guests ? room.guests.length : 1;
+                          const availRooms = getAvailableRooms(ri);
                           return (
                           <React.Fragment key={ri}>
                             <tr className={`${guestCount === 1 ? 'border-b border-neutral-100' : ''} hover:bg-neutral-50/50`}>
-                              <td className="px-3 py-1.5" rowSpan={guestCount}>
-                                <div className="text-sm font-medium text-neutral-900">{room.roomNumber}</div>
+                              <td className="px-2.5 py-1" rowSpan={guestCount}>
+                                <select value={room.roomNumber} onChange={(e) => {
+                                    const newRoom = e.target.value;
+                                    if (newRoom === room.roomNumber) return;
+                                    const next = JSON.parse(JSON.stringify(ed));
+                                    const oldRoom = next.rooms[ri].roomNumber;
+                                    next.rooms[ri].roomNumber = newRoom;
+                                    next.rooms[ri].roomType = getRoomTypeName(newRoom);
+                                    next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Room changed: ${oldRoom} → ${newRoom}`, user: 'Sophie' });
+                                    setEditingReservation(next);
+                                    setToastMessage(`Room changed to ${newRoom}`);
+                                  }}
+                                  className="w-full px-1.5 py-1 bg-transparent border border-neutral-200 rounded-lg text-xs font-bold text-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-900 appearance-none cursor-pointer">
+                                  {availRooms.map(rm => <option key={rm} value={rm}>{rm}</option>)}
+                                </select>
                               </td>
-                              <td className="px-3 py-1.5" rowSpan={guestCount}>
+                              <td className="px-2.5 py-1" rowSpan={guestCount}>
                                 <select value={room.status || 'confirmed'} onChange={(e) => updateRoomStatus(ri, e.target.value)}
-                                  className={`w-full px-2 py-1.5 rounded-lg text-xs font-semibold border-0 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-neutral-900 ${
+                                  className={`w-full px-1.5 py-1 rounded-lg text-xs font-semibold border-0 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-neutral-900 ${
                                     ({ confirmed: 'bg-blue-100 text-blue-800', option: 'bg-pink-100 text-pink-800', 'checked-in': 'bg-emerald-100 text-emerald-800', 'checked-out': 'bg-neutral-200 text-neutral-600', 'no-show': 'bg-red-100 text-red-800', cancelled: 'bg-red-100 text-red-800', blocked: 'bg-slate-200 text-slate-800' })[room.status || 'confirmed'] || 'bg-blue-100 text-blue-800'
                                   }`}>
                                   <option value="confirmed">Confirmed</option>
@@ -935,58 +983,57 @@ const ReservationDetailView = (props) => {
                                   <option value="blocked">Blocked</option>
                                 </select>
                               </td>
-                              <td className="px-3 py-1.5" rowSpan={guestCount}>
-                                <select value={room.roomType} onChange={(e) => { const nv = e.target.value; if (nv !== room.roomType) updateEd(`rooms.${ri}.roomType`, nv, `Room ${room.roomNumber}: type ${room.roomType} â†’ ${nv}`); }}
-                                  className="w-full px-2 py-1.5 bg-transparent border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 appearance-none cursor-pointer">
-                                  <option value="Standard">Standard</option>
-                                  <option value="Deluxe">Deluxe</option>
-                                  <option value="Suite">Suite</option>
-                                  <option value="Family">Family</option>
-                                </select>
-                              </td>
-                              <td className="px-3 py-1.5">
+                              <td className="px-2.5 py-1">
                                 <div className="flex gap-1 items-center">
                                   <input value={(room.guests && room.guests[0] ? room.guests[0].firstName : '') || ''} onChange={(e) => updateEd(`rooms.${ri}.guests.0.firstName`, e.target.value)}
                                     onFocus={onFocusTrack} onBlur={onBlurLog(`Room ${room.roomNumber} guest 1 first name`)}
                                     placeholder="First..."
-                                    className="w-1/2 px-2 py-1.5 bg-transparent border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
+                                    className="w-[28%] px-2 py-1 bg-transparent border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent" />
                                   <input value={(room.guests && room.guests[0] ? room.guests[0].lastName : '') || ''} onChange={(e) => updateEd(`rooms.${ri}.guests.0.lastName`, e.target.value)}
                                     onFocus={onFocusTrack} onBlur={onBlurLog(`Room ${room.roomNumber} guest 1 last name`)}
                                     placeholder="Last..."
-                                    className="w-1/2 px-2 py-1.5 bg-transparent border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
+                                    className="w-[28%] px-2 py-1 bg-transparent border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent" />
+                                  <input type="email" value={(room.guests && room.guests[0] ? room.guests[0].email : '') || ''} onChange={(e) => updateEd(`rooms.${ri}.guests.0.email`, e.target.value)}
+                                    onFocus={onFocusTrack} onBlur={onBlurLog(`Room ${room.roomNumber} guest 1 email`)}
+                                    placeholder="email..."
+                                    className="flex-1 px-2 py-1 bg-transparent border border-neutral-200 rounded-lg text-xs text-neutral-500 focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent" />
                                 </div>
                               </td>
-                              <td className="px-3 py-1.5" rowSpan={guestCount}>
-                                <select value={room.priceType} onChange={(e) => { const nv = e.target.value; if (nv !== room.priceType) updateEd(`rooms.${ri}.priceType`, nv, `Room ${room.roomNumber}: pricing ${room.priceType} â†’ ${nv}`); }}
-                                  className="w-full px-2 py-1.5 bg-transparent border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 appearance-none cursor-pointer">
+                              <td className="px-2.5 py-1" rowSpan={guestCount}>
+                                <select value={room.priceType} onChange={(e) => { const nv = e.target.value; if (nv !== room.priceType) updateEd(`rooms.${ri}.priceType`, nv, `Room ${room.roomNumber}: pricing ${room.priceType} → ${nv}`); }}
+                                  className="w-full px-1.5 py-1 bg-transparent border border-neutral-200 rounded-lg text-[11px] focus:outline-none focus:ring-2 focus:ring-neutral-900 appearance-none cursor-pointer">
                                   <option value="fixed">Fixed</option>
                                   <option value="per-night">Per Night</option>
                                 </select>
                               </td>
-                              <td className="px-3 py-1.5" rowSpan={guestCount}>
+                              <td className="px-2.5 py-1" rowSpan={guestCount}>
                                 {room.priceType === 'fixed' ? (
                                   <input type="number" value={room.fixedPrice || ''} onChange={(e) => updateEd(`rooms.${ri}.fixedPrice`, parseFloat(e.target.value) || 0)}
                                     onFocus={onFocusTrack} onBlur={onBlurLog(`Room ${room.roomNumber} price`)}
-                                    className="w-full px-2 py-1.5 bg-transparent border border-neutral-200 rounded-lg text-sm text-right focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
+                                    className="w-full px-2 py-1 bg-transparent border border-neutral-200 rounded-lg text-xs text-right focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent" />
                                 ) : (
-                                  <div className="text-sm text-right text-neutral-900 font-medium">
-                                    â‚¬{room.nightPrices.reduce((s, n) => s + (n.amount || 0), 0)}
+                                  <div className="text-xs text-right text-neutral-900 font-medium">
+                                    €{room.nightPrices.reduce((s, n) => s + (n.amount || 0), 0)}
                                   </div>
                                 )}
                               </td>
                             </tr>
                             {room.guests && room.guests.slice(1).map((guest, gi) => (
                               <tr key={`${ri}-g${gi+1}`} className={`${gi + 2 === guestCount ? 'border-b border-neutral-100' : ''} hover:bg-neutral-50/50`}>
-                                <td className="px-3 py-1.5">
+                                <td className="px-2.5 py-1">
                                   <div className="flex gap-1 items-center">
                                     <input value={guest.firstName || ''} onChange={(e) => updateEd(`rooms.${ri}.guests.${gi+1}.firstName`, e.target.value)}
                                       onFocus={onFocusTrack} onBlur={onBlurLog(`Room ${room.roomNumber} guest ${gi+2} first name`)}
                                       placeholder="First..."
-                                      className="w-1/2 px-2 py-1.5 bg-transparent border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
+                                      className="w-[28%] px-2 py-1 bg-transparent border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent" />
                                     <input value={guest.lastName || ''} onChange={(e) => updateEd(`rooms.${ri}.guests.${gi+1}.lastName`, e.target.value)}
                                       onFocus={onFocusTrack} onBlur={onBlurLog(`Room ${room.roomNumber} guest ${gi+2} last name`)}
                                       placeholder="Last..."
-                                      className="w-1/2 px-2 py-1.5 bg-transparent border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
+                                      className="w-[28%] px-2 py-1 bg-transparent border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent" />
+                                    <input type="email" value={guest.email || ''} onChange={(e) => updateEd(`rooms.${ri}.guests.${gi+1}.email`, e.target.value)}
+                                      onFocus={onFocusTrack} onBlur={onBlurLog(`Room ${room.roomNumber} guest ${gi+2} email`)}
+                                      placeholder="email..."
+                                      className="flex-1 px-2 py-1 bg-transparent border border-neutral-200 rounded-lg text-xs text-neutral-500 focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent" />
                                   </div>
                                 </td>
                               </tr>
@@ -996,17 +1043,46 @@ const ReservationDetailView = (props) => {
                         })}
                       </tbody>
                       <tfoot>
-                        <tr className="bg-neutral-50">
-                          <td colSpan="5" className="px-3 py-2.5 text-sm font-medium text-neutral-900">Total</td>
-                          <td className="px-3 py-2.5 text-right text-sm font-bold text-neutral-900">
-                            â‚¬{ed.rooms.reduce((s, r) => s + (r.priceType === 'fixed' ? (r.fixedPrice || 0) : r.nightPrices.reduce((ns, n) => ns + (n.amount || 0), 0)), 0).toFixed(2)}
+                        <tr className="bg-neutral-50 border-t border-neutral-200">
+                          <td colSpan="3" className="px-2.5 py-2 text-xs font-medium text-neutral-700">Total</td>
+                          <td colSpan="2" className="px-2.5 py-1.5">
+                            <div className="flex items-center gap-1.5 justify-end">
+                              <input type="number" placeholder="Set all..."
+                                id="quickEditBulkPrice"
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    const val = parseFloat(e.target.value);
+                                    if (isNaN(val)) return;
+                                    const next = JSON.parse(JSON.stringify(ed));
+                                    next.rooms.forEach(r => { r.fixedPrice = val; r.priceType = 'fixed'; });
+                                    next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `All rooms price set to €${val.toFixed(2)}`, user: 'Sophie' });
+                                    setEditingReservation(next);
+                                    setToastMessage(`All ${next.rooms.length} rooms set to €${val.toFixed(2)}`);
+                                    e.target.value = '';
+                                  }
+                                }}
+                                className="w-20 px-2 py-1 bg-white border border-neutral-200 rounded-lg text-xs text-right focus:outline-none focus:ring-2 focus:ring-neutral-900" />
+                              <button onClick={() => {
+                                  const val = parseFloat(document.getElementById('quickEditBulkPrice')?.value);
+                                  if (isNaN(val)) return;
+                                  const next = JSON.parse(JSON.stringify(ed));
+                                  next.rooms.forEach(r => { r.fixedPrice = val; r.priceType = 'fixed'; });
+                                  next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `All rooms price set to €${val.toFixed(2)}`, user: 'Sophie' });
+                                  setEditingReservation(next);
+                                  setToastMessage(`All ${next.rooms.length} rooms set to €${val.toFixed(2)}`);
+                                  document.getElementById('quickEditBulkPrice').value = '';
+                                }}
+                                className="px-2 py-1 bg-neutral-900 text-white rounded-lg text-[10px] font-medium hover:bg-neutral-800 transition-colors">Apply</button>
+                              <span className="text-xs font-bold text-neutral-900 pl-1">€{gridTotal.toFixed(2)}</span>
+                            </div>
                           </td>
                         </tr>
                       </tfoot>
                     </table>
                   </div>
                 </div>
-              )}
+                );
+              })()}
 
               {/* Detail View */}
               {!roomGridMode && (
@@ -1019,82 +1095,19 @@ const ReservationDetailView = (props) => {
                     ? `${primaryGuest.firstName || ''} ${primaryGuest.lastName || ''}`.trim()
                     : '';
                   return (
-                <div key={ri} className={`bg-white border border-neutral-200 rounded-2xl overflow-hidden ${isExpanded && isCollapsible ? 'md:col-span-2' : ''}`}>
-                  {/* Room Header */}
-                  <div className={`bg-neutral-50 px-4 py-2.5 ${isExpanded ? 'border-b border-neutral-200' : ''} ${isCollapsible ? 'cursor-pointer' : ''}`}
-                    onClick={isCollapsible ? (e) => { if (e.target.tagName === 'SELECT' || e.target.tagName === 'OPTION' || e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return; setExpandedRooms(prev => ({ ...prev, [ri]: !prev[ri] })); } : undefined}>
-                    {/* Primary row: room identity + guest + (secondary info when expanded/full-width) + icons */}
-                    <div className="flex items-center gap-2">
-                      <div className="flex-shrink-0 flex items-center gap-1.5">
-                        <span className="text-base font-semibold text-neutral-900">{room.roomNumber}</span>
-                        {room.housekeeping !== 'clean' && <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-amber-500" />}
-                        <span className="text-sm text-neutral-400">{room.roomType}</span>
-                      </div>
-                      {guestLabel && <span className="flex-1 min-w-0 text-sm text-neutral-600 truncate">{guestLabel}</span>}
-                      {!guestLabel && <div className="flex-1" />}
-                      {/* Secondary info inline when full-width (not collapsible, or expanded) */}
-                      {(!isCollapsible || isExpanded) && (
-                        <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                          <select value={room.status || 'confirmed'} onChange={(e) => updateRoomStatus(ri, e.target.value)}
-                            onClick={(e) => e.stopPropagation()}
-                            className={`flex-shrink-0 px-2 py-0.5 rounded-md text-[11px] font-semibold border-0 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-neutral-900 ${
-                              ({ confirmed: 'bg-blue-100 text-blue-800', option: 'bg-pink-100 text-pink-800', 'checked-in': 'bg-emerald-100 text-emerald-800', 'checked-out': 'bg-neutral-200 text-neutral-600', 'no-show': 'bg-red-100 text-red-800', cancelled: 'bg-red-100 text-red-800', blocked: 'bg-slate-200 text-slate-800' })[room.status || 'confirmed'] || 'bg-blue-100 text-blue-800'
-                            }`}>
-                            <option value="confirmed">Confirmed</option>
-                            <option value="option">Option</option>
-                            <option value="checked-in">Checked-in</option>
-                            <option value="checked-out">Checked-out</option>
-                            <option value="no-show">No-show</option>
-                            <option value="cancelled">Cancelled</option>
-                            <option value="blocked">Blocked</option>
-                          </select>
-                          <div className="flex items-center gap-1 text-[11px] text-neutral-400">
-                            <input type="date"
-                              value={room.checkin ? (room.checkin instanceof Date ? room.checkin.toISOString().slice(0, 10) : new Date(room.checkin).toISOString().slice(0, 10)) : ''}
-                              onChange={(e) => {
-                                e.stopPropagation();
-                                const newCheckin = new Date(e.target.value);
-                                if (isNaN(newCheckin)) return;
-                                const co = room.checkout ? new Date(room.checkout) : new Date(ed.checkout || reservation.checkout);
-                                if (newCheckin >= co) { setToastMessage('Check-in must be before check-out'); return; }
-                                const next = JSON.parse(JSON.stringify(ed));
-                                next.rooms[ri].checkin = newCheckin.toISOString();
-                                deriveReservationDates(next);
-                                setPendingDateChange({ next, source: 'room', roomIndex: ri });
-                              }}
-                              onClick={(e) => e.stopPropagation()}
-                              className="px-1 py-0 bg-transparent border-0 border-b border-dashed border-neutral-300 text-[11px] text-neutral-500 w-[90px] focus:outline-none focus:border-neutral-900 cursor-pointer" />
-                            <span className="text-neutral-300">&rarr;</span>
-                            <input type="date"
-                              value={room.checkout ? (room.checkout instanceof Date ? room.checkout.toISOString().slice(0, 10) : new Date(room.checkout).toISOString().slice(0, 10)) : ''}
-                              onChange={(e) => {
-                                e.stopPropagation();
-                                const newCheckout = new Date(e.target.value);
-                                if (isNaN(newCheckout)) return;
-                                const ci = room.checkin ? new Date(room.checkin) : new Date(ed.checkin || reservation.checkin);
-                                if (newCheckout <= ci) { setToastMessage('Check-out must be after check-in'); return; }
-                                const next = JSON.parse(JSON.stringify(ed));
-                                next.rooms[ri].checkout = newCheckout.toISOString();
-                                deriveReservationDates(next);
-                                setPendingDateChange({ next, source: 'room', roomIndex: ri });
-                              }}
-                              onClick={(e) => e.stopPropagation()}
-                              className="px-1 py-0 bg-transparent border-0 border-b border-dashed border-neutral-300 text-[11px] text-neutral-500 w-[90px] focus:outline-none focus:border-neutral-900 cursor-pointer" />
-                          </div>
-                          {(room.status || 'confirmed') === 'option' && (
-                            <div className="flex items-center gap-1">
-                              <input type="datetime-local" value={room.optionExpiry || ''} onChange={(e) => updateEd(`rooms.${ri}.optionExpiry`, e.target.value)}
-                                onClick={(e) => e.stopPropagation()}
-                                className="px-1.5 py-0.5 bg-pink-50 border border-pink-200 rounded-md text-[11px] text-pink-700 focus:outline-none focus:ring-1 focus:ring-pink-300 transition-all" />
-                              {room.optionExpiry && (
-                                <button onClick={(e) => { e.stopPropagation(); updateEd(`rooms.${ri}.optionExpiry`, null); }} className="text-pink-300 hover:text-pink-500 transition-colors">
-                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                                </button>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )}
+                <div key={ri} className={`bg-white border border-neutral-200 rounded-2xl overflow-hidden border-l-4 ${
+                  ({ confirmed: 'border-l-blue-400', option: 'border-l-pink-400', 'checked-in': 'border-l-emerald-400', 'checked-out': 'border-l-neutral-300', 'no-show': 'border-l-red-400', cancelled: 'border-l-red-300', blocked: 'border-l-slate-400' })[room.status || 'confirmed'] || 'border-l-blue-400'
+                } ${isExpanded && isCollapsible ? 'md:col-span-2' : ''}`}>
+                  {/* Room Header — click to collapse/expand */}
+                  <div className={`px-4 ${isCollapsible ? 'cursor-pointer select-none' : ''}`}
+                    onClick={isCollapsible ? (e) => { if (['SELECT','OPTION','BUTTON','INPUT'].includes(e.target.tagName)) return; setExpandedRooms(prev => ({ ...prev, [ri]: !prev[ri] })); } : undefined}>
+                    {/* Identity row */}
+                    <div className={`flex items-center gap-2 ${isExpanded ? 'pt-3 pb-2' : 'pt-3 pb-0.5'}`}>
+                      <span className="text-base font-bold text-neutral-900 flex-shrink-0">{room.roomNumber}</span>
+                      {(housekeepingStatus?.[reservation.id] || room.housekeeping) !== 'clean' && <div className="w-2 h-2 rounded-full flex-shrink-0 bg-amber-500" title="Housekeeping pending" />}
+                      <span className="text-[13px] text-neutral-400 font-medium flex-shrink-0">{room.roomType}</span>
+                      {guestLabel && <React.Fragment><span className="text-neutral-300 flex-shrink-0">&middot;</span><span className="text-[13px] text-neutral-500 truncate min-w-0">{guestLabel}</span></React.Fragment>}
+                      <div className="flex-1 min-w-0" />
                       {/* Action icons */}
                       <div className="flex items-center gap-1 flex-shrink-0 relative" data-popup onClick={(e) => e.stopPropagation()}>
                         {!room.roomLocked && (
@@ -1132,7 +1145,7 @@ const ReservationDetailView = (props) => {
                           <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-2xl border border-neutral-200 py-2 z-50">
                             <div className="px-3 py-1.5 text-xs font-medium text-neutral-500 uppercase tracking-wider">Available Rooms</div>
                             {(() => {
-                              const allRooms = ['101','102','103','104','105','201','202','203','303','401','403','501','502','503'];
+                              const allRooms = getAllRooms();
                               const usedRooms = ed.rooms.map(r => r.roomNumber);
                               const roomCi = room.checkin ? new Date(room.checkin) : new Date(ed.checkin || reservation.checkin);
                               const roomCo = room.checkout ? new Date(room.checkout) : new Date(ed.checkout || reservation.checkout);
@@ -1155,7 +1168,7 @@ const ReservationDetailView = (props) => {
                                   const next = JSON.parse(JSON.stringify(ed));
                                   const oldRoom = next.rooms[ri].roomNumber;
                                   next.rooms[ri].roomNumber = rm;
-                                  next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Room changed: ${oldRoom} â†’ ${rm}`, user: 'Sophie' });
+                                  next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Room changed: ${oldRoom} → ${rm}`, user: 'Sophie' });
                                   setEditingReservation(next);
                                   setChangeRoomTarget(null);
                                   setToastMessage(`Room changed to ${rm}`);
@@ -1167,71 +1180,172 @@ const ReservationDetailView = (props) => {
                           </div>
                         )}
                       </div>
+                      {isCollapsible && (
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`w-4 h-4 text-neutral-300 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`}><path d="M9 18l6-6-6-6"/></svg>
+                      )}
                     </div>
-                    {/* Secondary row: only when collapsed in narrow grid */}
-                    {isCollapsible && !isExpanded && (
-                    <div className="flex items-center gap-2 mt-1" onClick={(e) => e.stopPropagation()}>
-                      <select value={room.status || 'confirmed'} onChange={(e) => updateRoomStatus(ri, e.target.value)}
-                        onClick={(e) => e.stopPropagation()}
-                        className={`flex-shrink-0 px-2 py-0.5 rounded-md text-[11px] font-semibold border-0 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-neutral-900 ${
-                          ({ confirmed: 'bg-blue-100 text-blue-800', option: 'bg-pink-100 text-pink-800', 'checked-in': 'bg-emerald-100 text-emerald-800', 'checked-out': 'bg-neutral-200 text-neutral-600', 'no-show': 'bg-red-100 text-red-800', cancelled: 'bg-red-100 text-red-800', blocked: 'bg-slate-200 text-slate-800' })[room.status || 'confirmed'] || 'bg-blue-100 text-blue-800'
-                        }`}>
-                        <option value="confirmed">Confirmed</option>
-                        <option value="option">Option</option>
-                        <option value="checked-in">Checked-in</option>
-                        <option value="checked-out">Checked-out</option>
-                        <option value="no-show">No-show</option>
-                        <option value="cancelled">Cancelled</option>
-                        <option value="blocked">Blocked</option>
-                      </select>
-                      <div className="flex items-center gap-1 text-[11px] text-neutral-400 flex-shrink-0">
-                        <input type="date"
-                          value={room.checkin ? (room.checkin instanceof Date ? room.checkin.toISOString().slice(0, 10) : new Date(room.checkin).toISOString().slice(0, 10)) : ''}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            const newCheckin = new Date(e.target.value);
-                            if (isNaN(newCheckin)) return;
-                            const co = room.checkout ? new Date(room.checkout) : new Date(ed.checkout || reservation.checkout);
-                            if (newCheckin >= co) { setToastMessage('Check-in must be before check-out'); return; }
-                            const next = JSON.parse(JSON.stringify(ed));
-                            next.rooms[ri].checkin = newCheckin.toISOString();
-                            deriveReservationDates(next);
-                            setPendingDateChange({ next, source: 'room', roomIndex: ri });
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                          className="px-1 py-0 bg-transparent border-0 border-b border-dashed border-neutral-300 text-[11px] text-neutral-500 w-[90px] focus:outline-none focus:border-neutral-900 cursor-pointer" />
-                        <span className="text-neutral-300">&rarr;</span>
-                        <input type="date"
-                          value={room.checkout ? (room.checkout instanceof Date ? room.checkout.toISOString().slice(0, 10) : new Date(room.checkout).toISOString().slice(0, 10)) : ''}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            const newCheckout = new Date(e.target.value);
-                            if (isNaN(newCheckout)) return;
-                            const ci = room.checkin ? new Date(room.checkin) : new Date(ed.checkin || reservation.checkin);
-                            if (newCheckout <= ci) { setToastMessage('Check-out must be after check-in'); return; }
-                            const next = JSON.parse(JSON.stringify(ed));
-                            next.rooms[ri].checkout = newCheckout.toISOString();
-                            deriveReservationDates(next);
-                            setPendingDateChange({ next, source: 'room', roomIndex: ri });
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                          className="px-1 py-0 bg-transparent border-0 border-b border-dashed border-neutral-300 text-[11px] text-neutral-500 w-[90px] focus:outline-none focus:border-neutral-900 cursor-pointer" />
+                    {/* Collapsed: summary line */}
+                    {!isExpanded && (
+                      <div className="flex items-center gap-1.5 pb-2.5">
+                        {(housekeepingStatus?.[reservation.id] || room.housekeeping) !== 'clean' && <div className="w-2 h-2 rounded-full flex-shrink-0 bg-amber-500" title="Housekeeping pending" />}
+                        <span className={`text-xs font-semibold ${
+                          ({ confirmed: 'text-blue-600', option: 'text-pink-600', 'checked-in': 'text-emerald-600', 'checked-out': 'text-neutral-500', 'no-show': 'text-red-600', cancelled: 'text-red-500', blocked: 'text-slate-600' })[room.status || 'confirmed'] || 'text-blue-600'
+                        }`}>{({ confirmed: 'Confirmed', option: 'Option', 'checked-in': 'Checked-in', 'checked-out': 'Checked-out', 'no-show': 'No-show', cancelled: 'Cancelled', blocked: 'Blocked' })[room.status || 'confirmed']}</span>
+                        <span className="text-neutral-300 text-xs">&middot;</span>
+                        <span className="text-xs text-neutral-400">{ratePlans.find(rp => rp.id === room.ratePlanId)?.name || ratePlans[0]?.name}</span>
+                        <span className="text-neutral-300 text-xs">&middot;</span>
+                        <span className="text-xs font-medium text-neutral-500">€{room.priceType === 'fixed' ? (room.fixedPrice || 0) : (room.nightPrices || []).reduce((s, n) => s + (n.amount || 0), 0)}</span>
+                        <span className="text-neutral-300 text-xs">&middot;</span>
+                        <span className="text-xs text-neutral-400">{(() => { const ci = room.checkin ? new Date(room.checkin) : edCheckin; const co = room.checkout ? new Date(room.checkout) : edCheckout; return `${ci.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} → ${co.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`; })()}</span>
+                      </div>
+                    )}
+                  </div>
+                  {/* Expanded: form controls grid */}
+                  {isExpanded && (
+                    <div className="px-4 py-3 bg-neutral-50/80 border-b border-neutral-100" onClick={(e) => e.stopPropagation()}>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-2">
+                        <div>
+                          <div className="text-[10px] font-medium text-neutral-400 uppercase tracking-wider mb-0.5">Status</div>
+                          <select value={room.status || 'confirmed'} onChange={(e) => updateRoomStatus(ri, e.target.value)}
+                            className={`w-full px-2 py-1 rounded-lg text-xs font-semibold border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-neutral-900 ${
+                              ({ confirmed: 'bg-blue-100 text-blue-800', option: 'bg-pink-100 text-pink-800', 'checked-in': 'bg-emerald-100 text-emerald-800', 'checked-out': 'bg-neutral-200 text-neutral-600', 'no-show': 'bg-red-100 text-red-800', cancelled: 'bg-red-100 text-red-800', blocked: 'bg-slate-200 text-slate-800' })[room.status || 'confirmed'] || 'bg-blue-100 text-blue-800'
+                            }`}>
+                            <option value="confirmed">Confirmed</option>
+                            <option value="option">Option</option>
+                            <option value="checked-in">Checked-in</option>
+                            <option value="checked-out">Checked-out</option>
+                            <option value="no-show">No-show</option>
+                            <option value="cancelled">Cancelled</option>
+                            <option value="blocked">Blocked</option>
+                          </select>
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-medium text-neutral-400 uppercase tracking-wider mb-0.5">Rate Plan</div>
+                          <div className="flex items-center gap-1.5">
+                            <select value={room.ratePlanId || ratePlans[0]?.id || ''} onChange={(e) => updateEd(`rooms.${ri}.ratePlanId`, e.target.value)}
+                              className="flex-1 min-w-0 px-2 py-1 rounded-lg text-xs font-medium bg-white border border-neutral-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-neutral-900">
+                              {ratePlans.map(rp => <option key={rp.id} value={rp.id}>{rp.name}</option>)}
+                            </select>
+                            <button onClick={() => setPricingOpen(prev => ({ ...prev, [ri]: !prev[ri] }))}
+                              className={`flex-shrink-0 px-2 py-1 rounded-lg text-xs font-semibold transition-all ${pricingOpen[ri] ? 'bg-neutral-900 text-white' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'}`}
+                              title="Edit pricing">
+                              €{room.priceType === 'fixed' ? (room.fixedPrice || 0) : (room.nightPrices || []).reduce((s, n) => s + (n.amount || 0), 0)}
+                            </button>
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-medium text-neutral-400 uppercase tracking-wider mb-0.5">Check-in</div>
+                          <input type="date" onKeyDown={noTypeDateKey}
+                            value={room.checkin ? (room.checkin instanceof Date ? room.checkin.toISOString().slice(0, 10) : new Date(room.checkin).toISOString().slice(0, 10)) : ''}
+                            onChange={(e) => {
+                              const newCheckin = new Date(e.target.value);
+                              if (isNaN(newCheckin)) return;
+                              const co = room.checkout ? new Date(room.checkout) : new Date(ed.checkout || reservation.checkout);
+                              if (newCheckin >= co) { setToastMessage('Check-in must be before check-out'); return; }
+                              const next = JSON.parse(JSON.stringify(ed));
+                              next.rooms[ri].checkin = newCheckin.toISOString();
+                              deriveReservationDates(next);
+                              setPendingDateChange({ next, source: 'room', roomIndex: ri });
+                            }}
+                            className="w-full px-2 py-1 rounded-lg text-xs bg-white border border-neutral-200 focus:outline-none focus:ring-2 focus:ring-neutral-900 cursor-pointer" />
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-medium text-neutral-400 uppercase tracking-wider mb-0.5">Check-out</div>
+                          <input type="date" onKeyDown={noTypeDateKey}
+                            value={room.checkout ? (room.checkout instanceof Date ? room.checkout.toISOString().slice(0, 10) : new Date(room.checkout).toISOString().slice(0, 10)) : ''}
+                            onChange={(e) => {
+                              const newCheckout = new Date(e.target.value);
+                              if (isNaN(newCheckout)) return;
+                              const ci = room.checkin ? new Date(room.checkin) : new Date(ed.checkin || reservation.checkin);
+                              if (newCheckout <= ci) { setToastMessage('Check-out must be after check-in'); return; }
+                              const next = JSON.parse(JSON.stringify(ed));
+                              next.rooms[ri].checkout = newCheckout.toISOString();
+                              deriveReservationDates(next);
+                              setPendingDateChange({ next, source: 'room', roomIndex: ri });
+                            }}
+                            className="w-full px-2 py-1 rounded-lg text-xs bg-white border border-neutral-200 focus:outline-none focus:ring-2 focus:ring-neutral-900 cursor-pointer" />
+                        </div>
                       </div>
                       {(room.status || 'confirmed') === 'option' && (
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-2 mt-2">
+                          <div className="text-[10px] font-medium text-neutral-400 uppercase tracking-wider">Option expires</div>
                           <input type="datetime-local" value={room.optionExpiry || ''} onChange={(e) => updateEd(`rooms.${ri}.optionExpiry`, e.target.value)}
-                            onClick={(e) => e.stopPropagation()}
-                            className="px-1.5 py-0.5 bg-pink-50 border border-pink-200 rounded-md text-[11px] text-pink-700 focus:outline-none focus:ring-1 focus:ring-pink-300 transition-all" />
+                            className="px-2 py-1 bg-pink-50 border border-pink-200 rounded-lg text-xs text-pink-700 focus:outline-none focus:ring-1 focus:ring-pink-300" />
                           {room.optionExpiry && (
-                            <button onClick={(e) => { e.stopPropagation(); updateEd(`rooms.${ri}.optionExpiry`, null); }} className="text-pink-300 hover:text-pink-500 transition-colors">
-                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                            <button onClick={() => updateEd(`rooms.${ri}.optionExpiry`, null)} className="text-pink-300 hover:text-pink-500 transition-colors">
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
                             </button>
                           )}
                         </div>
                       )}
+                      {/* Pricing — inline, toggled from price badge */}
+                      {pricingOpen[ri] && (
+                        <div className="mt-2 pt-2 border-t border-neutral-200/60">
+                          <div className="flex items-center gap-3 mb-2">
+                            <div className="flex gap-1">
+                              <button onClick={() => { if (room.priceType !== 'fixed') updateEd(`rooms.${ri}.priceType`, 'fixed', `Room ${room.roomNumber}: pricing per-night → fixed`); }}
+                                className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-all ${
+                                  room.priceType === 'fixed' ? 'bg-neutral-900 text-white' : 'text-neutral-500 hover:bg-neutral-100'
+                                }`}>Fixed</button>
+                              <button onClick={() => { if (room.priceType !== 'per-night') updateEd(`rooms.${ri}.priceType`, 'per-night', `Room ${room.roomNumber}: pricing fixed → per-night`); }}
+                                className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-all ${
+                                  room.priceType === 'per-night' ? 'bg-neutral-900 text-white' : 'text-neutral-500 hover:bg-neutral-100'
+                                }`}>Per Night</button>
+                            </div>
+                          </div>
+                          {room.priceType === 'fixed' ? (
+                            <div className="relative max-w-xs">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 text-xs">EUR</span>
+                              <input type="number" value={room.fixedPrice || ''} onChange={(e) => updateEd(`rooms.${ri}.fixedPrice`, parseFloat(e.target.value) || 0)}
+                                onFocus={onFocusTrack} onBlur={onBlurLog(`Room ${room.roomNumber} price`)}
+                                className="w-full pl-12 pr-3 py-1.5 bg-white border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
+                            </div>
+                          ) : (
+                            <div className="bg-white rounded-lg overflow-hidden border border-neutral-200">
+                              <table className="w-full">
+                                <thead>
+                                  <tr className="border-b border-neutral-200">
+                                    <th className="px-3 py-1.5 text-left text-[10px] font-medium text-neutral-500 uppercase">Date</th>
+                                    <th className="px-3 py-1.5 text-right text-[10px] font-medium text-neutral-500 uppercase">Rate</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {room.nightPrices.map((night, ni) => (
+                                    <tr key={ni} className="border-b border-neutral-100 last:border-0">
+                                      <td className="px-3 py-1 text-xs text-neutral-900">
+                                        {formatDate(new Date(night.date))} <span className="text-neutral-400">{new Date(night.date).toLocaleDateString('en-GB', { weekday: 'short' })}</span>
+                                      </td>
+                                      <td className="px-3 py-1 text-right">
+                                        <div className="relative inline-block">
+                                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-neutral-400">EUR</span>
+                                          <input type="number" value={night.amount}
+                                            onChange={(e) => {
+                                              const next = JSON.parse(JSON.stringify(ed));
+                                              next.rooms[ri].nightPrices[ni].amount = parseFloat(e.target.value) || 0;
+                                              setEditingReservation(next);
+                                            }}
+                                            onFocus={onFocusTrack} onBlur={onBlurLog(`Room ${room.roomNumber} night rate (${night.date})`)}
+                                            className="w-24 pl-10 pr-2 py-1 bg-white border border-neutral-200 rounded-lg text-xs text-right focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                                <tfoot>
+                                  <tr className="bg-neutral-50">
+                                    <td className="px-3 py-1.5 text-xs font-medium text-neutral-900">Total</td>
+                                    <td className="px-3 py-1.5 text-right text-xs font-bold text-neutral-900">
+                                      EUR {room.nightPrices.reduce((s, n) => s + (n.amount || 0), 0)}
+                                    </td>
+                                  </tr>
+                                </tfoot>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    )}
-                  </div>
+                  )}
 
                   {room.roomLocked && (
                     <div className="px-4 py-2 bg-red-50 border-b border-red-100 flex items-center gap-2">
@@ -1244,7 +1358,7 @@ const ReservationDetailView = (props) => {
                   )}
 
                   {isExpanded && (
-                  <div className="p-4 space-y-4">
+                  <div className="p-4 pt-3 space-y-3">
                     {/* Guests */}
                     <div>
                       {/* Guest tabs */}
@@ -1312,11 +1426,11 @@ const ReservationDetailView = (props) => {
                                 }} className="text-xs text-red-400 hover:text-red-600 transition-colors">Remove</button>
                               )}
                             </div>
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5">
                               <input value={g.firstName || ''} onChange={(e) => updateEd(`rooms.${ri}.guests.${gi}.firstName`, e.target.value)}
                                 onFocus={onFocusTrack} onBlur={onBlurLog(`Room ${room.roomNumber} guest ${gi+1} first name`)}
                                 placeholder="First name"
-                                className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
+                                className="w-full px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
                               <div className="relative">
                                 <input value={g.lastName || ''} onChange={(e) => {
                                     updateEd(`rooms.${ri}.guests.${gi}.lastName`, e.target.value);
@@ -1325,8 +1439,8 @@ const ReservationDetailView = (props) => {
                                   onFocus={(e) => { onFocusTrack(e); if (!g.firstName && !g.email && !g.phone) setGuestSearchActive({ ri, gi }); }}
                                   onBlur={(e) => { onBlurLog(`Room ${room.roomNumber} guest ${gi+1} last name`)(e); setTimeout(() => setGuestSearchActive(null), 200); }}
                                   placeholder="Last name"
-                                  className="w-full px-3 py-2 pr-8 bg-neutral-50 border border-neutral-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-neutral-300 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                                  className="w-full px-2.5 py-1.5 pr-7 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3 text-neutral-300 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                                 {guestSearchActive && guestSearchActive.ri === ri && guestSearchActive.gi === gi && g.lastName && g.lastName.length >= 2 && (() => {
                                   const matches = guestRegistry.filter(gr =>
                                     gr.lastName.toLowerCase().includes(g.lastName.toLowerCase()) &&
@@ -1356,15 +1470,15 @@ const ReservationDetailView = (props) => {
                               </div>
                               <input type="email" value={g.email || ''} onChange={(e) => updateEd(`rooms.${ri}.guests.${gi}.email`, e.target.value)}
                                 placeholder="Email"
-                                className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
+                                className="w-full px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
                               <div className="flex gap-1.5">
                                 <input type="tel" value={g.phone || ''} onChange={(e) => updateEd(`rooms.${ri}.guests.${gi}.phone`, e.target.value)}
                                   placeholder="Phone"
-                                  className="flex-1 min-w-0 px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
+                                  className="flex-1 min-w-0 px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
                                 {g.phone && (
                                   <a href={`https://wa.me/${g.phone.replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer"
                                     title="Chat via WhatsApp"
-                                    className="flex items-center justify-center w-9 h-9 rounded-xl border border-neutral-200 hover:bg-emerald-50 hover:border-emerald-300 transition-colors flex-shrink-0">
+                                    className="flex items-center justify-center w-7 h-7 rounded-lg border border-neutral-200 hover:bg-emerald-50 hover:border-emerald-300 transition-colors flex-shrink-0">
                                     <svg viewBox="0 0 24 24" fill="#25D366" className="w-4 h-4">
                                       <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
                                     </svg>
@@ -1372,13 +1486,13 @@ const ReservationDetailView = (props) => {
                                 )}
                               </div>
                               <select value={g.nationality || 'NL'} onChange={(e) => updateEd(`rooms.${ri}.guests.${gi}.nationality`, e.target.value)}
-                                className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all appearance-none">
+                                className="w-full px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all appearance-none">
                                 {['NL','BE','DE','FR','GB','US','IT','ES','PT','AT','CH','DK','SE','NO','PL','CZ'].map(c => (
                                   <option key={c} value={c}>{c}</option>
                                 ))}
                               </select>
                               <select value={g.idType || ''} onChange={(e) => updateEd(`rooms.${ri}.guests.${gi}.idType`, e.target.value)}
-                                className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all appearance-none">
+                                className="w-full px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all appearance-none">
                                 <option value="">ID type...</option>
                                 <option value="passport">Passport</option>
                                 <option value="id-card">ID Card</option>
@@ -1386,7 +1500,7 @@ const ReservationDetailView = (props) => {
                               </select>
                               <input value={g.idNumber || ''} onChange={(e) => updateEd(`rooms.${ri}.guests.${gi}.idNumber`, e.target.value)}
                                 placeholder="ID number"
-                                className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
+                                className="w-full px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
                             </div>
                           </div>
                         );
@@ -1397,79 +1511,10 @@ const ReservationDetailView = (props) => {
                     <div>
                       <textarea value={room.housekeepingNote || ''} onChange={(e) => updateEd(`rooms.${ri}.housekeepingNote`, e.target.value)}
                         placeholder="Housekeeping notes..."
-                        rows="2"
-                        className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all resize-none" />
+                        rows="1"
+                        className="w-full px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all resize-none" />
                     </div>
 
-                    {/* Pricing */}
-                    <div>
-                      <div>
-                        <div className="flex items-center gap-3 mb-2">
-                          <div className="text-xs font-medium text-neutral-500 uppercase tracking-wider">Pricing</div>
-                          <div className="flex gap-1">
-                            <button onClick={() => { if (room.priceType !== 'fixed') updateEd(`rooms.${ri}.priceType`, 'fixed', `Room ${room.roomNumber}: pricing per-night â†’ fixed`); }}
-                              className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-all ${
-                                room.priceType === 'fixed' ? 'bg-neutral-900 text-white' : 'text-neutral-500 hover:bg-neutral-100'
-                              }`}>Fixed</button>
-                            <button onClick={() => { if (room.priceType !== 'per-night') updateEd(`rooms.${ri}.priceType`, 'per-night', `Room ${room.roomNumber}: pricing fixed â†’ per-night`); }}
-                              className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-all ${
-                                room.priceType === 'per-night' ? 'bg-neutral-900 text-white' : 'text-neutral-500 hover:bg-neutral-100'
-                              }`}>Per Night</button>
-                          </div>
-                        </div>
-
-                        {room.priceType === 'fixed' ? (
-                          <div className="relative max-w-xs">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 text-xs">EUR</span>
-                            <input type="number" value={room.fixedPrice || ''} onChange={(e) => updateEd(`rooms.${ri}.fixedPrice`, parseFloat(e.target.value) || 0)}
-                              onFocus={onFocusTrack} onBlur={onBlurLog(`Room ${room.roomNumber} price`)}
-                              className="w-full pl-12 pr-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
-                          </div>
-                        ) : (
-                          <div className="bg-neutral-50 rounded-xl overflow-hidden">
-                            <table className="w-full">
-                              <thead>
-                                <tr className="border-b border-neutral-200">
-                                  <th className="px-3 py-2 text-left text-xs font-medium text-neutral-500 uppercase">Date</th>
-                                  <th className="px-3 py-2 text-right text-xs font-medium text-neutral-500 uppercase">Rate</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {room.nightPrices.map((night, ni) => (
-                                  <tr key={ni} className="border-b border-neutral-100 last:border-0">
-                                    <td className="px-3 py-2 text-sm text-neutral-900">
-                                      {formatDate(new Date(night.date))} <span className="text-neutral-400">{new Date(night.date).toLocaleDateString('en-GB', { weekday: 'short' })}</span>
-                                    </td>
-                                    <td className="px-3 py-2 text-right">
-                                      <div className="relative inline-block">
-                                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-neutral-400">EUR</span>
-                                        <input type="number" value={night.amount}
-                                          onChange={(e) => {
-                                            const next = JSON.parse(JSON.stringify(ed));
-                                            next.rooms[ri].nightPrices[ni].amount = parseFloat(e.target.value) || 0;
-                                            setEditingReservation(next);
-                                          }}
-                                          onFocus={onFocusTrack} onBlur={onBlurLog(`Room ${room.roomNumber} night rate (${night.date})`)}
-                                          className="w-24 pl-10 pr-2 py-1 bg-white border border-neutral-200 rounded-lg text-sm text-right focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
-                                      </div>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                              <tfoot>
-                                <tr className="bg-neutral-100">
-                                  <td className="px-3 py-2 text-sm font-medium text-neutral-900">Total</td>
-                                  <td className="px-3 py-2 text-right text-sm font-bold text-neutral-900">
-                                    EUR {room.nightPrices.reduce((s, n) => s + (n.amount || 0), 0)}
-                                  </td>
-                                </tr>
-                              </tfoot>
-                            </table>
-                          </div>
-                        )}
-                      </div>
-
-                    </div>
                   </div>
                   )}
                 </div>
@@ -1478,33 +1523,35 @@ const ReservationDetailView = (props) => {
               )}
 
               {/* Unified Extras Table (shown in both views) */}
-              <div className="bg-white border border-neutral-200 rounded-2xl p-4">
-                <div className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-3">Extras</div>
-                <div className="bg-neutral-50 rounded-xl overflow-hidden">
+              <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden border-l-4 border-l-neutral-300">
+                <div className="px-4 pt-3 pb-2">
+                  <div className="text-xs font-medium text-neutral-500 uppercase tracking-wider">Extras</div>
+                </div>
+                <div>
                   <table className="w-full">
                     <thead>
-                      <tr className="border-b border-neutral-200">
-                        <th className="px-3 py-2 text-left text-xs font-medium text-neutral-500 uppercase w-16">Qty</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-neutral-500 uppercase">Name</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-neutral-500 uppercase w-20">Room</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-neutral-500 uppercase w-16">VAT %</th>
-                        <th className="px-3 py-2 text-right text-xs font-medium text-neutral-500 uppercase w-28">Unit Price</th>
-                        <th className="px-3 py-2 text-right text-xs font-medium text-neutral-500 uppercase w-28">Total</th>
+                      <tr className="border-b border-neutral-200 bg-neutral-50/80">
+                        <th className="px-3 py-2 text-left text-[10px] font-medium text-neutral-400 uppercase tracking-wider w-16">Qty</th>
+                        <th className="px-3 py-2 text-left text-[10px] font-medium text-neutral-400 uppercase tracking-wider">Name</th>
+                        <th className="px-3 py-2 text-left text-[10px] font-medium text-neutral-400 uppercase tracking-wider w-20">Room</th>
+                        <th className="px-3 py-2 text-left text-[10px] font-medium text-neutral-400 uppercase tracking-wider w-16">VAT %</th>
+                        <th className="px-3 py-2 text-right text-[10px] font-medium text-neutral-400 uppercase tracking-wider w-28">Unit Price</th>
+                        <th className="px-3 py-2 text-right text-[10px] font-medium text-neutral-400 uppercase tracking-wider w-28">Total</th>
                         <th className="px-2 py-2 w-8"></th>
                       </tr>
                     </thead>
                     <tbody>
                       {(ed.extras || []).map((extra, ei) => (
                         <tr key={extra.id} className="border-b border-neutral-100 last:border-0">
-                          <td className="px-3 py-2">
+                          <td className="px-3 py-1.5">
                             <input type="number" min="1" value={extra.quantity} onChange={(e) => {
                               const next = JSON.parse(JSON.stringify(ed));
                               next.extras[ei].quantity = parseInt(e.target.value) || 1;
                               setEditingReservation(next);
-                            }} className="w-14 px-2 py-1 bg-white border border-neutral-200 rounded-lg text-sm text-center focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent" />
+                            }} className="w-12 px-2 py-1 bg-white border border-neutral-200 rounded-lg text-xs text-center focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent" />
                           </td>
-                          <td className="px-3 py-2 text-sm text-neutral-900 font-medium">{extra.name}</td>
-                          <td className="px-3 py-2">
+                          <td className="px-3 py-1.5 text-xs text-neutral-900 font-medium">{extra.name}</td>
+                          <td className="px-3 py-1.5">
                             <select value={extra.room || ''} onChange={(e) => {
                               const next = JSON.parse(JSON.stringify(ed));
                               next.extras[ei].room = e.target.value || null;
@@ -1516,7 +1563,7 @@ const ReservationDetailView = (props) => {
                               ))}
                             </select>
                           </td>
-                          <td className="px-3 py-2">
+                          <td className="px-3 py-1.5">
                             <select value={extra.vatRate} onChange={(e) => {
                               const next = JSON.parse(JSON.stringify(ed));
                               next.extras[ei].vatRate = parseInt(e.target.value);
@@ -1528,38 +1575,38 @@ const ReservationDetailView = (props) => {
                               <option value="21">21</option>
                             </select>
                           </td>
-                          <td className="px-3 py-2 text-right">
+                          <td className="px-3 py-1.5 text-right">
                             <div className="relative inline-block">
-                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-neutral-400">â‚¬</span>
+                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-neutral-400">€</span>
                               <input type="number" step="0.01" min="0" value={extra.unitPrice} onChange={(e) => {
                                 const next = JSON.parse(JSON.stringify(ed));
                                 next.extras[ei].unitPrice = parseFloat(e.target.value) || 0;
                                 setEditingReservation(next);
-                              }} className="w-20 pl-6 pr-2 py-1 bg-white border border-neutral-200 rounded-lg text-sm text-right focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent" />
+                              }} className="w-20 pl-6 pr-2 py-1 bg-white border border-neutral-200 rounded-lg text-xs text-right focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent" />
                             </div>
                           </td>
-                          <td className="px-3 py-2 text-right text-sm font-medium text-neutral-900">
-                            â‚¬{((extra.quantity || 0) * (extra.unitPrice || 0)).toFixed(2)}
+                          <td className="px-3 py-1.5 text-right text-xs font-medium text-neutral-900">
+                            €{((extra.quantity || 0) * (extra.unitPrice || 0)).toFixed(2)}
                           </td>
-                          <td className="px-2 py-2">
+                          <td className="px-2 py-1.5">
                             <button onClick={() => {
                               const next = JSON.parse(JSON.stringify(ed));
                               const removed = next.extras[ei];
                               next.extras.splice(ei, 1);
                               next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Extra removed: ${removed.name}`, user: 'Sophie' });
                               setEditingReservation(next);
-                            }} className="w-6 h-6 rounded hover:bg-red-50 flex items-center justify-center transition-colors">
-                              <Icons.X className="w-3.5 h-3.5 text-neutral-400 hover:text-red-500" />
+                            }} className="w-5 h-5 rounded hover:bg-red-50 flex items-center justify-center transition-colors">
+                              <Icons.X className="w-3 h-3 text-neutral-400 hover:text-red-500" />
                             </button>
                           </td>
                         </tr>
                       ))}
                       {/* Add row */}
                       <tr className="border-t border-neutral-200 bg-white">
-                        <td className="px-3 py-2">
-                          <input type="number" min="1" value="1" id="newExtraQty" className="w-14 px-2 py-1 bg-neutral-50 border border-neutral-200 rounded-lg text-sm text-center focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent" />
+                        <td className="px-3 py-1.5">
+                          <input type="number" min="1" value="1" id="newExtraQty" className="w-12 px-2 py-1 bg-neutral-50 border border-neutral-200 rounded-lg text-xs text-center focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent" />
                         </td>
-                        <td className="px-3 py-2" colSpan="3">
+                        <td className="px-3 py-1.5" colSpan="3">
                           <select id="newExtraName" defaultValue="" onChange={(e) => {
                             if (!e.target.value) return;
                             const cat = extrasCatalog.find(c => c.name === e.target.value);
@@ -1581,24 +1628,24 @@ const ReservationDetailView = (props) => {
                             setEditingReservation(next);
                             e.target.value = '';
                             if (qtyEl) qtyEl.value = '1';
-                          }} className="w-full px-2 py-1 bg-neutral-50 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent cursor-pointer">
+                          }} className="w-full px-2 py-1 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent cursor-pointer">
                             <option value="" disabled>+ Add extra...</option>
                             {extrasCatalog.map(c => (
-                              <option key={c.name} value={c.name}>{c.name} {c.defaultPrice > 0 ? `(â‚¬${c.defaultPrice})` : ''}</option>
+                              <option key={c.name} value={c.name}>{c.name} {c.defaultPrice > 0 ? `(€${c.defaultPrice})` : ''}</option>
                             ))}
                           </select>
                         </td>
-                        <td className="px-3 py-2 text-right text-xs text-neutral-400">â‚¬</td>
-                        <td className="px-3 py-2"></td>
-                        <td className="px-2 py-2"></td>
+                        <td className="px-3 py-1.5 text-right text-xs text-neutral-400">€</td>
+                        <td className="px-3 py-1.5"></td>
+                        <td className="px-2 py-1.5"></td>
                       </tr>
                     </tbody>
                     {(ed.extras || []).length > 0 && (
                       <tfoot>
                         <tr className="bg-neutral-100">
-                          <td colSpan="5" className="px-3 py-2 text-sm font-medium text-neutral-900">Extras Total</td>
-                          <td className="px-3 py-2 text-right text-sm font-bold text-neutral-900">
-                            â‚¬{(ed.extras || []).reduce((s, ex) => s + (ex.quantity || 0) * (ex.unitPrice || 0), 0).toFixed(2)}
+                          <td colSpan="5" className="px-3 py-1.5 text-xs font-medium text-neutral-900">Extras Total</td>
+                          <td className="px-3 py-1.5 text-right text-xs font-bold text-neutral-900">
+                            €{(ed.extras || []).reduce((s, ex) => s + (ex.quantity || 0) * (ex.unitPrice || 0), 0).toFixed(2)}
                           </td>
                           <td></td>
                         </tr>
@@ -1608,7 +1655,7 @@ const ReservationDetailView = (props) => {
                 </div>
               </div>
 
-              {/* Add Room â€” with date pickers + availability check */}
+              {/* Add Room — with date pickers + availability check */}
               {(() => {
                 const allRoomNumbers = ['101','102','103','104','105','201','202','203','303','401','403','501','502','503'];
                 const usedRooms = ed.rooms.map(r => r.roomNumber);
@@ -1637,11 +1684,11 @@ const ReservationDetailView = (props) => {
                     <div className="flex items-center justify-between mb-3">
                       <div className="text-xs font-medium text-neutral-400 uppercase tracking-wider">Add rooms</div>
                       <div className="flex items-center gap-1.5 text-[11px] text-neutral-500">
-                        <input type="date" value={addRoomDates.checkin}
+                        <input type="date" value={addRoomDates.checkin} onKeyDown={noTypeDateKey}
                           onChange={(e) => setAddRoomDates(prev => ({ ...prev, checkin: e.target.value }))}
                           className="px-1.5 py-0.5 bg-neutral-50 border border-neutral-200 rounded-md text-[11px] w-[105px] focus:outline-none focus:ring-1 focus:ring-neutral-400" />
                         <span className="text-neutral-300">&rarr;</span>
-                        <input type="date" value={addRoomDates.checkout}
+                        <input type="date" value={addRoomDates.checkout} onKeyDown={noTypeDateKey}
                           onChange={(e) => setAddRoomDates(prev => ({ ...prev, checkout: e.target.value }))}
                           className="px-1.5 py-0.5 bg-neutral-50 border border-neutral-200 rounded-md text-[11px] w-[105px] focus:outline-none focus:ring-1 focus:ring-neutral-400" />
                       </div>
@@ -1672,7 +1719,7 @@ const ReservationDetailView = (props) => {
                             housekeeping: 'clean', housekeepingNote: '', optionExpiry: null,
                             roomLocked: false, roomLockedReason: ''
                           });
-                          next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Room ${rm} added (${addRoomDates.checkin} â†’ ${addRoomDates.checkout})`, user: 'Sophie' });
+                          next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Room ${rm} added (${addRoomDates.checkin} → ${addRoomDates.checkout})`, user: 'Sophie' });
                           setEditingReservation(next);
                           setToastMessage(`Room ${rm} added`);
                           setTimeout(() => { addRoomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, 50);
@@ -1744,7 +1791,7 @@ td:last-child { text-align: right; font-weight: 500; }
 <div class="header">
 <div>
   <div class="hotel">RUMO</div>
-  <div class="hotel-details">Rumo Boutique Hotel<br>Keizerslei 42, 2000 Antwerpen<br>BTW BE0123.456.789<br>info@rumohotel.be Â· +32 3 123 45 67</div>
+  <div class="hotel-details">Rumo Boutique Hotel<br>Keizerslei 42, 2000 Antwerpen<br>BTW BE0123.456.789<br>info@rumohotel.be · +32 3 123 45 67</div>
 </div>
 <div class="invoice-title">
   <h2>${isCredit ? 'CREDIT NOTE' : inv.type === 'proforma' ? 'PROFORMA' : 'INVOICE'}</h2>
@@ -1756,7 +1803,7 @@ td:last-child { text-align: right; font-weight: 500; }
 <div class="meta">
 <div class="meta-block">
   <div class="label">Bill to</div>
-  <div class="value" style="font-weight:500;">${r.name || 'â€”'}</div>
+  <div class="value" style="font-weight:500;">${r.name || '—'}</div>
   ${r.vatNumber ? '<div class="value">' + r.vatNumber + '</div>' : ''}
   ${r.address ? '<div class="value">' + r.address + '</div>' : ''}
   ${r.zip || r.city ? '<div class="value">' + [r.zip, r.city].filter(Boolean).join(' ') + '</div>' : ''}
@@ -1767,9 +1814,9 @@ td:last-child { text-align: right; font-weight: 500; }
   <div class="label">Date</div>
   <div class="value">${inv.date}</div>
   <div class="label" style="margin-top:8px;">Stay</div>
-  <div class="value">${checkIn} â€” ${checkOut}</div>
+  <div class="value">${checkIn} — ${checkOut}</div>
   <div class="label" style="margin-top:8px;">Booking Ref</div>
-  <div class="value">${ed.bookingRef || 'â€”'}</div>
+  <div class="value">${ed.bookingRef || '—'}</div>
   ${inv.reference ? '<div class="label" style="margin-top:8px;">Your Reference</div><div class="value">' + inv.reference + '</div>' : ''}
 </div>
 </div>
@@ -1783,9 +1830,9 @@ td:last-child { text-align: right; font-weight: 500; }
 ${Object.entries(vatGroups).map(([rate, g]) => '<div class="row vat"><span>Net (' + rate + '% VAT)</span><span>EUR ' + g.net.toFixed(2) + '</span></div><div class="row vat"><span>VAT ' + rate + '%</span><span>EUR ' + g.vat.toFixed(2) + '</span></div>').join('')}
 <div class="row total"><span>Total</span><span>EUR ${inv.amount.toFixed(2)}</span></div>
 </div>
-${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPayments.map(p => '<div class="pay-row"><span class="pay-method">' + p.method + ' Â· ' + p.date + '</span><span>EUR ' + p.amount.toFixed(2) + '</span></div>').join('') + (invPaid < inv.amount && !isCredit ? '<div class="pay-row due"><span>Amount due</span><span>EUR ' + (inv.amount - invPaid).toFixed(2) + '</span></div>' : '') + '</div>' : ''}
-<div class="ref">Booking ref: ${ed.bookingRef || 'â€”'}${ed.otaRef ? ' Â· OTA ref: ' + ed.otaRef : ''}</div>
-<div class="footer">Rumo Boutique Hotel Â· Keizerslei 42, 2000 Antwerpen Â· BE0123.456.789 Â· IBAN BE68 5390 0754 7034</div>
+${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPayments.map(p => '<div class="pay-row"><span class="pay-method">' + p.method + ' · ' + p.date + '</span><span>EUR ' + p.amount.toFixed(2) + '</span></div>').join('') + (invPaid < inv.amount && !isCredit ? '<div class="pay-row due"><span>Amount due</span><span>EUR ' + (inv.amount - invPaid).toFixed(2) + '</span></div>' : '') + '</div>' : ''}
+<div class="ref">Booking ref: ${ed.bookingRef || '—'}${ed.otaRef ? ' · OTA ref: ' + ed.otaRef : ''}</div>
+<div class="footer">Rumo Boutique Hotel · Keizerslei 42, 2000 Antwerpen · BE0123.456.789 · IBAN BE68 5390 0754 7034</div>
 </body></html>`;
               let iframe = document.getElementById('_printFrame');
               if (!iframe) { iframe = document.createElement('iframe'); iframe.id = '_printFrame'; iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:0;height:0;border:none;'; document.body.appendChild(iframe); }
@@ -1807,12 +1854,12 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
               const roomNights = room.nightPrices ? room.nightPrices.length : nights;
               const roomCi = room.checkin ? new Date(room.checkin) : reservation.checkin;
               const roomCo = room.checkout ? new Date(room.checkout) : reservation.checkout;
-              const dateRange = roomCi && roomCo ? `${formatDate(roomCi)} â†’ ${formatDate(roomCo)}` : '';
-              billableItems.push({ key: `room-${i}`, type: 'room', label: `Room ${room.roomNumber}`, detail: `${room.roomType} Â· ${roomNights} night${roomNights !== 1 ? 's' : ''} Â· ${dateRange}`, amount, vatRate: hotelSettings.defaultRoomVat });
+              const dateRange = roomCi && roomCo ? `${formatDate(roomCi)} → ${formatDate(roomCo)}` : '';
+              billableItems.push({ key: `room-${i}`, type: 'room', label: `Room ${room.roomNumber}`, detail: `${room.roomType} · ${roomNights} night${roomNights !== 1 ? 's' : ''} · ${dateRange}`, amount, vatRate: hotelSettings.defaultRoomVat });
             });
             (ed.extras || []).forEach(ex => {
               const amount = (ex.quantity || 0) * (ex.unitPrice || 0);
-              if (amount > 0) billableItems.push({ key: `extra-${ex.id}`, type: 'extra', label: ex.name, detail: `${ex.quantity} Ã— EUR ${ex.unitPrice}${ex.room ? ` Â· Room ${ex.room}` : ''}`, amount, vatRate: ex.vatRate });
+              if (amount > 0) billableItems.push({ key: `extra-${ex.id}`, type: 'extra', label: ex.name, detail: `${ex.quantity} × EUR ${ex.unitPrice}${ex.room ? ` · Room ${ex.room}` : ''}`, amount, vatRate: ex.vatRate });
             });
 
             // Which items are on active (non-credited, non-proforma) invoices?
@@ -1874,7 +1921,7 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
               }
               const invoiceRef = (next.billingRecipient?.reference || '').trim();
               next.invoices.push({ id: Date.now(), number: invNum, date: new Date().toISOString().split('T')[0], amount: selectedTotal, type, status: 'created', items: invoiceItems, linkedPayments: linkedPays, recipient, reference: invoiceRef || '' });
-              next.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `${type === 'proforma' ? 'Proforma' : 'Invoice'} ${invNum} created (EUR ${selectedTotal}, ${selectedItems.length} items)${linkedPays.length > 0 ? ` â€” ${linkedPays.length} payment(s) linked` : ''}`, user: 'Sophie' });
+              next.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `${type === 'proforma' ? 'Proforma' : 'Invoice'} ${invNum} created (EUR ${selectedTotal}, ${selectedItems.length} items)${linkedPays.length > 0 ? ` — ${linkedPays.length} payment(s) linked` : ''}`, user: 'Sophie' });
               // Optional: check out all rooms
               if (checkout) {
                 (next.rooms || []).forEach(r => { r.status = 'checked-out'; });
@@ -1933,7 +1980,7 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
                     <div className="bg-white border border-neutral-200 rounded-2xl p-4">
                       {!billSplitMode ? (
                         <>
-                          {/* Compact mode â€” summary */}
+                          {/* Compact mode — summary */}
                           <div className="flex items-center justify-between mb-3">
                             <div className="text-xs font-medium text-neutral-500 uppercase tracking-wider">Uninvoiced</div>
                             <button onClick={() => { setBillSplitMode(true); setBillSelected(null); }}
@@ -1946,7 +1993,7 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
                               <span>{uninvoicedItems.filter(i => i.type === 'room').length} room{uninvoicedItems.filter(i => i.type === 'room').length !== 1 ? 's' : ''}</span>
                             )}
                             {uninvoicedItems.filter(i => i.type === 'extra').length > 0 && (
-                              <span>{uninvoicedItems.filter(i => i.type === 'room').length > 0 ? ' Â· ' : ''}{uninvoicedItems.filter(i => i.type === 'extra').length} extra{uninvoicedItems.filter(i => i.type === 'extra').length !== 1 ? 's' : ''}</span>
+                              <span>{uninvoicedItems.filter(i => i.type === 'room').length > 0 ? ' · ' : ''}{uninvoicedItems.filter(i => i.type === 'extra').length} extra{uninvoicedItems.filter(i => i.type === 'extra').length !== 1 ? 's' : ''}</span>
                             )}
                           </div>
                           <div className="text-lg font-light text-neutral-900 mb-3 font-serif">EUR {selectedTotal}</div>
@@ -1966,7 +2013,7 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
                         </>
                       ) : (
                         <>
-                          {/* Split mode â€” individual items */}
+                          {/* Split mode — individual items */}
                           <div className="flex items-center justify-between mb-3">
                             <div className="text-xs font-medium text-neutral-500 uppercase tracking-wider">Select Items</div>
                             <div className="flex gap-2">
@@ -2141,7 +2188,7 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
                                 className={`flex-1 px-3 py-2 rounded-xl text-xs font-medium transition-colors ${
                                   selectedItems.length > 0 ? 'bg-neutral-900 text-white hover:bg-neutral-800' : 'bg-neutral-100 text-neutral-400 cursor-not-allowed'
                                 }`}>
-                                Create Invoice Â· EUR {selectedTotal}
+                                Create Invoice · EUR {selectedTotal}
                               </button>
                               <button onClick={() => createInvoice('proforma')} disabled={selectedItems.length === 0}
                                 className={`px-3 py-2 rounded-xl text-xs font-medium transition-colors ${
@@ -2172,10 +2219,16 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
                           dragPaymentRef.current = null;
                           const next = JSON.parse(JSON.stringify(ed));
                           const p = next.payments.find(pp => pp.id === payId);
-                          if (p && !p.linkedInvoice) {
+                          if (p && p.linkedInvoice !== inv.number) {
+                            // Unlink from old invoice if reassigning
+                            if (p.linkedInvoice) {
+                              const oldInv = next.invoices.find(ii => ii.number === p.linkedInvoice);
+                              if (oldInv && oldInv.linkedPayments) oldInv.linkedPayments = oldInv.linkedPayments.filter(id => id !== payId);
+                            }
                             p.linkedInvoice = inv.number;
                             const invObj = next.invoices.find(ii => ii.id === inv.id);
                             if (invObj) { if (!invObj.linkedPayments) invObj.linkedPayments = []; invObj.linkedPayments.push(payId); }
+                            next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `EUR ${p.amount} linked to ${inv.number}`, user: 'Sophie' });
                             setEditingReservation(next);
                             setToastMessage(`EUR ${p.amount} linked to ${inv.number}`);
                           }
@@ -2205,7 +2258,7 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3 flex-shrink-0"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                               )}
                               <span>{inv.recipient.name}</span>
-                              {inv.recipient.vatNumber && <span className="text-neutral-400">Â· {inv.recipient.vatNumber}</span>}
+                              {inv.recipient.vatNumber && <span className="text-neutral-400">· {inv.recipient.vatNumber}</span>}
                             </div>
                           </div>
                         )}
@@ -2233,7 +2286,7 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
                             <div className="mt-1 space-y-0.5">
                               {invPayments.map(p => (
                                 <div key={p.id} className="flex justify-between text-xs text-emerald-600">
-                                  <span>{p.method} Â· {p.date}</span>
+                                  <span>{p.method} · {p.date}</span>
                                   <span>EUR {p.amount}</span>
                                 </div>
                               ))}
@@ -2278,7 +2331,7 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
                               </div>
                             );
                           })()}
-                          {/* Peppol â€” only for real company invoices (not proformas) */}
+                          {/* Peppol — only for real company invoices (not proformas) */}
                           {inv.type !== 'proforma' && inv.recipient?.vatNumber && (() => {
                             const ps = inv.peppolStatus;
                             const hasPeppol = !!inv.recipient?.peppolId;
@@ -2286,19 +2339,19 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
                               : ps === 'error' ? 'bg-amber-50 text-amber-600 hover:bg-amber-100'
                               : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200';
                             const psTitle = ps === 'delivered' ? 'Delivered via Peppol'
-                              : ps === 'error' ? `Peppol delivery failed\n\nRecipient ${inv.recipient?.peppolId || 'â€”'} could not be reached.\nThe access point did not respond or rejected the document.\n\nRetry or verify the Peppol ID.`
-                              : hasPeppol ? `Send via Peppol to ${inv.recipient.peppolId}` : 'No Peppol ID â€” edit recipient to add one';
+                              : ps === 'error' ? `Peppol delivery failed\n\nRecipient ${inv.recipient?.peppolId || '—'} could not be reached.\nThe access point did not respond or rejected the document.\n\nRetry or verify the Peppol ID.`
+                              : hasPeppol ? `Send via Peppol to ${inv.recipient.peppolId}` : 'No Peppol ID — edit recipient to add one';
                             return (
                               <button onClick={() => {
                                 if (ps === 'delivered') return;
-                                if (!hasPeppol) { setToastMessage('No Peppol ID â€” edit recipient to add one'); return; }
+                                if (!hasPeppol) { setToastMessage('No Peppol ID — edit recipient to add one'); return; }
                                 const next = JSON.parse(JSON.stringify(ed));
                                 const invObj = next.invoices.find(ii => ii.id === inv.id);
                                 const newStatus = Math.random() < 0.7 ? 'delivered' : 'error';
                                 if (invObj) invObj.peppolStatus = newStatus;
-                                next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `${inv.number} sent via Peppol â€” ${newStatus === 'delivered' ? 'delivered' : 'delivery failed'}`, user: 'Sophie' });
+                                next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `${inv.number} sent via Peppol — ${newStatus === 'delivered' ? 'delivered' : 'delivery failed'}`, user: 'Sophie' });
                                 setEditingReservation(next);
-                                setToastMessage(newStatus === 'delivered' ? `Delivered via Peppol to ${inv.recipient.peppolId}` : 'Peppol delivery failed â€” recipient unreachable');
+                                setToastMessage(newStatus === 'delivered' ? `Delivered via Peppol to ${inv.recipient.peppolId}` : 'Peppol delivery failed — recipient unreachable');
                               }}
                                 title={psTitle}
                                 className={`px-2 py-1 rounded text-xs transition-colors ${psClass}`}>
@@ -2347,12 +2400,13 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
                               if (invObj) invObj.status = 'credited';
                               const creditNum = `CN-${10000000 + Math.floor(Math.random() * 9000000)}`;
                               next.invoices.push({ id: Date.now(), number: creditNum, date: new Date().toISOString().split('T')[0], amount: inv.amount, type: 'credit', status: 'created', items: inv.items || [], linkedPayments: [], creditFor: inv.number, recipient: inv.recipient ? { ...inv.recipient } : null, reference: inv.reference || '' });
-                              // Unlink payments from credited invoice
+                              // Unlink payments from credited invoice — return to unlinked pool
                               invPayments.forEach(p => { const pp = next.payments.find(pp => pp.id === p.id); if (pp) pp.linkedInvoice = null; });
-                              next.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Credit note ${creditNum} for ${inv.number} â€” items released`, user: 'Sophie' });
+                              if (invObj) invObj.linkedPayments = [];
+                              next.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Credit note ${creditNum} for ${inv.number} — items released`, user: 'Sophie' });
                               setEditingReservation(next);
                               setBillSelected(null);
-                              setToastMessage('Credit note created â€” items available for re-invoicing');
+                              setToastMessage('Credit note created — items available for re-invoicing');
                             }}
                               className="px-2 py-1 bg-red-50 text-red-600 rounded text-xs hover:bg-red-100 transition-colors">Credit</button>
                           )}
@@ -2424,7 +2478,7 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
 
                           return (
                             <div className="mx-4 mb-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">
-                              <div className="text-xs font-medium text-amber-700 mb-2">Amend {inv.number} â€” select new recipient</div>
+                              <div className="text-xs font-medium text-amber-700 mb-2">Amend {inv.number} — select new recipient</div>
                               <div className="flex items-center gap-1.5 flex-wrap mb-2">
                                 {/* Keep original */}
                                 <button onClick={() => setAmendRecipient(null)}
@@ -2548,7 +2602,7 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
                             <span className="px-1.5 py-0.5 bg-red-100 text-red-700 rounded text-xs">CN</span>
                             {cn.number}
                           </div>
-                          <div className="text-xs text-neutral-500 mt-0.5">EUR {cn.amount} Â· {cn.date} Â· Credits {cn.creditFor}</div>
+                          <div className="text-xs text-neutral-500 mt-0.5">EUR {cn.amount} · {cn.date} · Credits {cn.creditFor}</div>
                         </div>
                         <div className="flex gap-1">
                           <button onClick={() => window._printInvoice(cn, ed, ed.payments)}
@@ -2570,20 +2624,21 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
                   <div className="space-y-2">
                     {ed.payments.map((payment) => {
                       const canLink = payment.status === 'completed' && !payment.linkedInvoice;
-                      const canDrag = canLink && activeInvoices.some(inv => inv.status !== 'credited');
+                      const canReassign = payment.status === 'completed' && payment.linkedInvoice && activeInvoices.filter(inv => inv.status !== 'credited' && inv.number !== payment.linkedInvoice).length > 0;
+                      const canDrag = (canLink || canReassign) && activeInvoices.some(inv => inv.status !== 'credited');
                       const canCheck = canLink && billSplitMode && uninvoicedItems.length > 0;
                       const isPayChecked = billPaySelected.includes(payment.id);
                       return (
                       <div key={payment.id}
-                        draggable={canDrag && !canCheck}
-                        onDragStart={canDrag && !canCheck ? (e) => { dragPaymentRef.current = payment.id; e.dataTransfer.effectAllowed = 'move'; e.currentTarget.style.opacity = '0.5'; } : undefined}
-                        onDragEnd={canDrag && !canCheck ? (e) => { dragPaymentRef.current = null; e.currentTarget.style.opacity = '1'; } : undefined}
+                        draggable={(canDrag || canReassign) && !canCheck}
+                        onDragStart={(canDrag || canReassign) && !canCheck ? (e) => { dragPaymentRef.current = payment.id; e.dataTransfer.effectAllowed = 'move'; e.currentTarget.style.opacity = '0.5'; } : undefined}
+                        onDragEnd={(canDrag || canReassign) && !canCheck ? (e) => { dragPaymentRef.current = null; e.currentTarget.style.opacity = '1'; } : undefined}
                         onClick={canCheck ? () => setBillPaySelected(prev => prev.includes(payment.id) ? prev.filter(id => id !== payment.id) : [...prev, payment.id]) : undefined}
                         className={`flex items-center justify-between p-3 rounded-xl transition-all ${
                         payment.status === 'pending' ? 'bg-amber-50 border border-amber-200' :
                         payment.status === 'request-sent' ? 'bg-blue-50 border border-blue-200' :
                         isPayChecked ? 'bg-emerald-50 border border-emerald-200' : 'bg-white'
-                      } ${canCheck ? 'cursor-pointer' : canDrag ? 'cursor-grab active:cursor-grabbing' : ''}`}>
+                      } ${canCheck ? 'cursor-pointer' : (canDrag || canReassign) ? 'cursor-grab active:cursor-grabbing' : ''}`}>
                         <div className="flex items-center gap-3">
                           {canCheck ? (
                             <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
@@ -2591,8 +2646,8 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
                             }`}>
                               {isPayChecked && <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" className="w-3 h-3"><polyline points="20 6 9 17 4 12"/></svg>}
                             </div>
-                          ) : canDrag ? (
-                            <svg viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3 text-neutral-300 flex-shrink-0"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
+                          ) : (canDrag || canReassign) ? (
+                            <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-neutral-400 flex-shrink-0"><circle cx="9" cy="6" r="2"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="9" cy="18" r="2"/><circle cx="15" cy="18" r="2"/></svg>
                           ) : null}
                           <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
                             payment.status === 'pending' ? 'bg-amber-100' :
@@ -2613,7 +2668,7 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
                               {payment.status === 'request-sent' && <span className="ml-1 text-blue-600">(request sent)</span>}
                             </div>
                             <div className="text-xs text-neutral-500">
-                              {payment.date}{payment.note ? ` â€” ${payment.note}` : ''}
+                              {payment.date}{payment.note ? ` — ${payment.note}` : ''}
                               {payment.linkedInvoice && <span className="ml-1 text-blue-600">({payment.linkedInvoice})</span>}
                             </div>
                           </div>
@@ -2691,7 +2746,7 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
                             ed._paymentMode === 'creditcard' ? 'bg-neutral-900 text-white' : 'text-neutral-500 hover:bg-neutral-100'
                           }`}>
                           <Icons.CreditCard className="w-3 h-3" />
-                          {'â€¢â€¢â€¢â€¢ ' + card.last4}
+                          {'•••• ' + card.last4}
                         </button>
                       );
                     })()}
@@ -2738,7 +2793,7 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
                           <div className="relative flex-1">
                             <select id="emailRecipient" className="w-full px-2 py-1.5 pr-7 bg-white border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all appearance-none">
                               {emailRecipients.length > 0 ? emailRecipients.map((r, i) => (
-                                <option key={i} value={r.email}>{r.label} â€” {r.email}</option>
+                                <option key={i} value={r.email}>{r.label} — {r.email}</option>
                               )) : (
                                 <option value="">No email addresses available</option>
                               )}
@@ -2763,7 +2818,7 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
                             const reminderDue = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16);
                             if (!next.reminders) next.reminders = [];
                             next.reminders.push({ id: Date.now() + 2, message: `Check payment EUR ${amount} (${recipientEmail})`, dueDate: reminderDue, createdAt: Date.now(), fired: false, toastShown: false });
-                            next.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Email payment request EUR ${amount} sent to ${recipientEmail} â€” reminder set for 24h`, user: 'Sophie' });
+                            next.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Email payment request EUR ${amount} sent to ${recipientEmail} — reminder set for 24h`, user: 'Sophie' });
                             setEditingReservation(next);
                             setToastMessage(`EUR ${amount} request sent to ${recipientEmail}`);
                           }}
@@ -2792,10 +2847,10 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
                           const amount = parseFloat(document.getElementById('ccAmount').value) || 0;
                           if (amount <= 0) return;
                           const next = JSON.parse(JSON.stringify(ed));
-                          next.payments.push({ id: Date.now(), date: new Date().toISOString().split('T')[0], amount, method: `Credit Card (â€¢â€¢â€¢â€¢ ${card.last4})`, note: 'Charged to card on file', status: 'completed', linkedInvoice: null });
-                          next.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Credit card charge: EUR ${amount} (â€¢â€¢â€¢â€¢ ${card.last4})`, user: 'Sophie' });
+                          next.payments.push({ id: Date.now(), date: new Date().toISOString().split('T')[0], amount, method: `Credit Card (•••• ${card.last4})`, note: 'Charged to card on file', status: 'completed', linkedInvoice: null });
+                          next.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Credit card charge: EUR ${amount} (•••• ${card.last4})`, user: 'Sophie' });
                           setEditingReservation(next);
-                          setToastMessage(`EUR ${amount} charged to â€¢â€¢â€¢â€¢ ${card.last4}`);
+                          setToastMessage(`EUR ${amount} charged to •••• ${card.last4}`);
                         }}
                           className="px-3 py-1.5 bg-neutral-900 text-white rounded-lg text-xs font-medium hover:bg-neutral-800 transition-colors whitespace-nowrap flex items-center gap-1">
                           <Icons.CreditCard className="w-3 h-3" />

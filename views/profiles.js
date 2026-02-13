@@ -861,7 +861,7 @@ const ProfilesView = (props) => {
                   </div>
                   <div>
                     <label className="block text-xs text-neutral-500 mb-1">Date of birth</label>
-                    <input type="date" value={p.dateOfBirth || ''} onChange={e => updateEP('dateOfBirth', e.target.value || null)} className="w-full px-3 py-2 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-300" />
+                    <input type="date" value={p.dateOfBirth || ''} onChange={e => updateEP('dateOfBirth', e.target.value || null)} onKeyDown={noTypeDateKey} className="w-full px-3 py-2 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-300" />
                   </div>
                 </div>
               </div>
