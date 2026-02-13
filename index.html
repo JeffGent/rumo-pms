@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="nl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rumo</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23171717'/><text x='50' y='72' font-size='65' font-family='Georgia,serif' font-weight='bold' fill='white' text-anchor='middle'>R</text></svg>" />
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+
+  <body>
+    <div id="root"></div>
+
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+
+    <!-- Babel Standalone for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- App -->
+    <script type="text/babel" src="icons.js"></script>
+    <script type="text/babel" src="utils.js"></script>
+    <script type="text/babel" src="config.js"></script>
+    <script type="text/babel" src="data.js"></script>
+    <script type="text/babel" src="supabase.js"></script>
+
+    <!-- Views -->
+    <script type="text/babel" src="views/dashboard.js"></script>
+    <script type="text/babel" src="views/calendar.js"></script>
+    <script type="text/babel" src="views/housekeeping.js"></script>
+    <script type="text/babel" src="views/fnb.js"></script>
+    <script type="text/babel" src="views/profiles.js"></script>
+    <script type="text/babel" src="views/settings.js"></script>
+    <script type="text/babel" src="views/reports.js"></script>
+    <script type="text/babel" src="views/detail.js"></script>
+
+    <!-- Components -->
+    <script type="text/babel" src="components/search.js"></script>
+    <script type="text/babel" src="components/newres.js"></script>
+    <script type="text/babel" src="components/invoice.js"></script>
+    <script type="text/babel" src="components/messages.js"></script>
+
+    <!-- Main app (layout + routing) -->
+    <script type="text/babel" src="app.js"></script>
+  </body>
+</html>
