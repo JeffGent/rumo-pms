@@ -21,9 +21,24 @@ const FBView = (props) => {
 
   const activeReservations = Array.from(roomsMap.values()).filter(r => r.guest);
 
-  const breakfastGuests = activeReservations.filter(r => r.meals && r.meals.breakfast);
-  const lunchGuests = activeReservations.filter(r => r.meals && r.meals.lunch);
-  const dinnerGuests = activeReservations.filter(r => r.meals && r.meals.dinner);
+  // Check if reservation has extras with meal flags in catalog
+  const hasExtraMeal = (res, mealFlag) => {
+    if (!res.extras || res.extras.length === 0) return false;
+    return res.extras.some(ex => {
+      const cat = extrasCatalog.find(c => c.name === ex.name);
+      return cat && cat[mealFlag];
+    });
+  };
+
+  const breakfastGuests = activeReservations.filter(r => {
+    if (r.meals?.breakfast) return true;
+    // Show if extras-based breakfast AND rate plan doesn't already include breakfast
+    const rp = r._roomData?.ratePlanId && ratePlans.find(p => p.id === r._roomData.ratePlanId);
+    if (rp && rp.includesBreakfast) return false;
+    return hasExtraMeal(r, 'breakfast');
+  });
+  const lunchGuests = activeReservations.filter(r => r.meals?.lunch || hasExtraMeal(r, 'lunch'));
+  const dinnerGuests = activeReservations.filter(r => r.meals?.dinner || hasExtraMeal(r, 'dinner'));
 
   const tabs = [
     { id: 'all', label: `All [${activeReservations.length}]`, data: activeReservations },
@@ -111,15 +126,15 @@ const FBView = (props) => {
         <div className="grid grid-cols-3 gap-2 md:gap-4 mb-4 md:mb-6">
           <div className="bg-amber-50 border border-amber-200 rounded-xl md:rounded-2xl p-3 md:p-4 text-center">
             <div className="text-lg md:text-2xl font-semibold text-neutral-900">{totalCovers.breakfast}</div>
-            <div className="text-[10px] md:text-xs font-medium text-amber-700 uppercase tracking-wider mt-1">Breakfast</div>
+            <div className="text-[11px] md:text-xs font-medium text-amber-700 uppercase tracking-wider mt-1">Breakfast</div>
           </div>
           <div className="bg-orange-50 border border-orange-200 rounded-xl md:rounded-2xl p-3 md:p-4 text-center">
             <div className="text-lg md:text-2xl font-semibold text-neutral-900">{totalCovers.lunch}</div>
-            <div className="text-[10px] md:text-xs font-medium text-orange-700 uppercase tracking-wider mt-1">Lunch</div>
+            <div className="text-[11px] md:text-xs font-medium text-orange-700 uppercase tracking-wider mt-1">Lunch</div>
           </div>
           <div className="bg-indigo-50 border border-indigo-200 rounded-xl md:rounded-2xl p-3 md:p-4 text-center">
             <div className="text-lg md:text-2xl font-semibold text-neutral-900">{totalCovers.dinner}</div>
-            <div className="text-[10px] md:text-xs font-medium text-indigo-700 uppercase tracking-wider mt-1">Dinner</div>
+            <div className="text-[11px] md:text-xs font-medium text-indigo-700 uppercase tracking-wider mt-1">Dinner</div>
           </div>
         </div>
 
@@ -150,16 +165,19 @@ const FBView = (props) => {
                   </div>
                 </div>
                 <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
-                  {res.meals?.breakfast && (() => {
+                  {(() => {
+                    const mealFlag = res.meals?.breakfast;
+                    const extrasBreakfast = hasExtraMeal(res, 'breakfast');
+                    if (!mealFlag && !extrasBreakfast) return null;
                     const rp = res._roomData?.ratePlanId && ratePlans.find(p => p.id === res._roomData.ratePlanId);
                     const included = rp && rp.includesBreakfast;
-                    return <span className={`px-2 md:px-3 py-1 rounded-lg text-[10px] md:text-xs font-medium border ${included ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-amber-50 text-amber-700 border-amber-200'}`} title={included ? `Included in ${rp.name}` : 'Breakfast'}>{included ? 'B incl.' : 'B'}</span>;
+                    return <span className={`px-2 md:px-3 py-1 rounded-lg text-[11px] md:text-xs font-medium border ${included ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-amber-50 text-amber-700 border-amber-200'}`} title={included ? `Included in ${rp.name}` : extrasBreakfast ? 'Breakfast (extra)' : 'Breakfast'}>{included ? 'B incl.' : 'B'}</span>;
                   })()}
-                  {res.meals?.lunch && (
-                    <span className="px-2 md:px-3 py-1 bg-orange-50 text-orange-700 rounded-lg text-[10px] md:text-xs font-medium border border-orange-200">L</span>
+                  {(res.meals?.lunch || hasExtraMeal(res, 'lunch')) && (
+                    <span className="px-2 md:px-3 py-1 bg-orange-50 text-orange-700 rounded-lg text-[11px] md:text-xs font-medium border border-orange-200">L</span>
                   )}
-                  {res.meals?.dinner && (
-                    <span className="px-2 md:px-3 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-[10px] md:text-xs font-medium border border-indigo-200">D</span>
+                  {(res.meals?.dinner || hasExtraMeal(res, 'dinner')) && (
+                    <span className="px-2 md:px-3 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-[11px] md:text-xs font-medium border border-indigo-200">D</span>
                   )}
                 </div>
               </div>

@@ -144,26 +144,40 @@ const generateReservations = () => {
       }
     }
 
+    // Auto-calculate extra quantity using catalog flags
+    const calcExtraQty = (cat, guests, nights) => {
+      if (cat.perPerson && cat.perNight) return guests * nights;
+      if (cat.perPerson) return guests;
+      if (cat.perNight) return nights;
+      return 1;
+    };
+
     let extId = 1;
     const unifiedExtras = [];
-    if (stayLength > 0) unifiedExtras.push({ id: extId++, name: 'Citytax', quantity: stayLength * guestCount, room: null, vatRate: 6, unitPrice: 3 });
+    const citytaxCat = extrasCatalog.find(c => c.name === 'Citytax');
+    if (citytaxCat && stayLength > 0) {
+      unifiedExtras.push({ id: extId++, name: citytaxCat.name, quantity: calcExtraQty(citytaxCat, guestCount, stayLength), room: null, vatRate: citytaxCat.defaultVat, unitPrice: citytaxCat.defaultPrice });
+    }
     const resExtraNames = extraOptions[Math.floor(Math.random() * extraOptions.length)];
     resExtraNames.forEach(name => {
       const cat = extrasCatalog.find(c => c.name.toLowerCase().startsWith(name.toLowerCase()));
-      if (cat) unifiedExtras.push({ id: extId++, name: cat.name, quantity: stayLength || 1, room: null, vatRate: cat.defaultVat, unitPrice: cat.defaultPrice });
+      if (cat) unifiedExtras.push({ id: extId++, name: cat.name, quantity: calcExtraQty(cat, guestCount, stayLength) || 1, room: null, vatRate: cat.defaultVat, unitPrice: cat.defaultPrice });
     });
     if (Math.random() < 0.2) {
-      const roomCats = extrasCatalog.filter(c => ['Extra Bed', 'Crib', 'Rollaway Bed', 'Safe', 'Minibar'].includes(c.name));
-      const pick = roomCats[Math.floor(Math.random() * roomCats.length)];
-      unifiedExtras.push({ id: extId++, name: pick.name, quantity: pick.name === 'Minibar' ? 1 : (stayLength || 1), room: room, vatRate: pick.defaultVat, unitPrice: pick.defaultPrice });
+      const roomCats = extrasCatalog.filter(c => c.housekeepingList || ['Safe', 'Minibar'].includes(c.name));
+      if (roomCats.length > 0) {
+        const pick = roomCats[Math.floor(Math.random() * roomCats.length)];
+        unifiedExtras.push({ id: extId++, name: pick.name, quantity: calcExtraQty(pick, guestCount, stayLength) || 1, room: room, vatRate: pick.defaultVat, unitPrice: pick.defaultPrice });
+      }
     }
 
+    const currentId = resId++;
     return {
-      id: resId++,
+      id: currentId,
       room,
       type: roomType,
       guest,
-      bookingRef: `RMO-${String(resId).padStart(5, '0')}`,
+      bookingRef: `RMO-${String(currentId).padStart(5, '0')}`,
       otaRef: bookedVia === 'booking.com' ? `BDC-${100000000 + Math.floor(Math.random() * 900000000)}` :
               bookedVia === 'expedia' ? `EXP-${10000000 + Math.floor(Math.random() * 90000000)}` :
               bookedVia === 'agency' ? `AGN-${100000 + Math.floor(Math.random() * 900000)}` : null,
@@ -279,9 +293,10 @@ const generateReservations = () => {
     if (isRoomFree(room, offset, offset + len)) {
       const blockReasons = ['Maintenance', 'Renovation', 'Out of order', 'Deep cleaning'];
       roomOccupancy[room].push({ from: offset, to: offset + len });
+      const blockId = resId++;
       reservations.push({
-        id: resId++, room, type: roomTypeMap[room], guest: '',
-        bookingRef: `RMO-${String(resId).padStart(5, '0')}`, otaRef: null,
+        id: blockId, room, type: roomTypeMap[room], guest: '',
+        bookingRef: `RMO-${String(blockId).padStart(5, '0')}`, otaRef: null,
         checkin: addDays(today, offset).toISOString(), checkout: addDays(today, offset + len).toISOString(),
         status: 'future', isCheckedIn: false, checkedInTime: null, isCheckedOut: false, isOption: false,
         guestCount: 0, meals: { breakfast: false, lunch: false, dinner: false },
@@ -305,7 +320,7 @@ const generateReservations = () => {
 };
 
 // Data version — increment to force regeneration when model changes
-const DATA_VERSION = 25;
+const DATA_VERSION = 27;
 
 // Laad of genereer reserveringen met localStorage persistentie
 const getReservations = () => {

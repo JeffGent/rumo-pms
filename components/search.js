@@ -42,7 +42,7 @@ const SearchModal = (props) => {
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
             />
-            <kbd className="hidden sm:inline-flex items-center px-2 py-0.5 bg-neutral-100 rounded-md text-[10px] font-medium text-neutral-500 border border-neutral-200">ESC</kbd>
+            <kbd className="hidden sm:inline-flex items-center px-2 py-0.5 bg-neutral-100 rounded-md text-[11px] font-medium text-neutral-500 border border-neutral-200">ESC</kbd>
           </div>
 
           {/* Results */}
@@ -50,7 +50,7 @@ const SearchModal = (props) => {
             {searchQuery.length > 0 ? (
               filteredResults.length > 0 ? (
                 <div className="py-2">
-                  <div className="px-4 py-2 text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">Reservations</div>
+                  <div className="px-4 py-2 text-[11px] font-semibold text-neutral-400 uppercase tracking-wider">Reservations</div>
                   {filteredResults.map(res => (
                     <button key={res.id}
                       className="w-full px-4 py-3 flex items-center gap-3 hover:bg-neutral-50 transition-colors text-left"

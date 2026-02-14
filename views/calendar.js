@@ -7,7 +7,7 @@ const CalendarView = (props) => {
 
     // Build flat room entries: 1 entry per room (multi-room reservations exploded)
     const flatEntries = buildFlatRoomEntries(reservations);
-    const allRooms = [...new Set(flatEntries.map(r => r.room))].sort((a, b) => parseInt(a) - parseInt(b));
+    const allRooms = getAllRooms();
 
     const statusToChip = (res) => {
       if (!res) return null;
@@ -362,7 +362,7 @@ const CalendarView = (props) => {
           </div>
         </aside>
         <div className="cal-view">
-        <div className="flex items-center justify-between px-4 py-2 border-b border-neutral-200 bg-white flex-shrink-0">
+        <div className="flex items-center justify-between px-5 py-2.5 border-b border-neutral-200 bg-white flex-shrink-0">
           <div className="flex items-center gap-4">
             <div className="flex gap-2">
               {filterTabs.map(tab => (
@@ -481,7 +481,7 @@ const CalendarView = (props) => {
                     onDragOver={(e) => handleRowDragOver(e, room)}
                     onDrop={(e) => handleRowDrop(e, room)}>
                     <span className="room-num">{room}</span>
-                    <span className="room-type">{roomData ? roomData.type : ''}</span>
+                    <span className="room-type">{getRoomTypeName(room)}</span>
                     {!isClean && <><span style={{flex:1}} /><span className="room-dot dirty"></span></>}
                   </div>
                   {days.map((day, i) => {
@@ -532,7 +532,7 @@ const CalendarView = (props) => {
                               <div className="res-name" style={{ flex: 1 }}>{chipStatus === 'blocked' ? (res.blockReason || 'Blocked') : res.guest}
                                 {chipStatus !== 'blocked' && res.paidPercentage !== undefined && res.paidPercentage < 1 && (
                                   <span style={{
-                                    display: 'inline-block', width: '4px', height: '4px', borderRadius: '50%',
+                                    display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%',
                                     backgroundColor: res.paidPercentage === 0 ? '#ef4444' : '#f59e0b',
                                     marginLeft: '4px', verticalAlign: 'middle'
                                   }} />
@@ -546,7 +546,7 @@ const CalendarView = (props) => {
                                   const label = isExpired ? 'exp' : daysLeft >= 1 ? `${daysLeft}d` : `${hoursLeft}h`;
                                   return (
                                     <span style={{
-                                      marginLeft: '4px', fontSize: '8px', fontWeight: 600, letterSpacing: '0.02em',
+                                      marginLeft: '4px', fontSize: '10px', fontWeight: 600, letterSpacing: '0.02em',
                                       color: isExpired ? '#ef4444' : hoursLeft < 24 ? '#f59e0b' : '#ec4899',
                                       verticalAlign: 'middle'
                                     }}>&#9201;{label}</span>

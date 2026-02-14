@@ -528,7 +528,7 @@ const ModernHotelPMS = () => {
     }
   }, [housekeepingStatus]);
 
-  const totalRooms = 14;
+  const totalRooms = getAllRooms().length;
 
   // Navigation Tabs
   const navTabs = [
@@ -631,7 +631,7 @@ const ModernHotelPMS = () => {
                 className="flex items-center gap-3 pl-3 pr-3 py-2 w-auto flex-1 md:w-56 md:flex-none bg-neutral-100 rounded-xl text-sm text-neutral-400 hover:bg-neutral-200 transition-all duration-200 cursor-pointer">
                 <Icons.Search className="w-4 h-4 flex-shrink-0" />
                 <span className="hidden md:inline flex-1 text-left">Search...</span>
-                <kbd className="hidden md:inline px-1.5 py-0.5 bg-white rounded-md text-[10px] font-medium text-neutral-400 border border-neutral-200">Ctrl+K</kbd>
+                <kbd className="hidden md:inline px-1.5 py-0.5 bg-white rounded-md text-[11px] font-medium text-neutral-400 border border-neutral-200">Ctrl+K</kbd>
               </button>
 
               {/* Messages */}
@@ -643,7 +643,7 @@ const ModernHotelPMS = () => {
                   const remindersDue = reservations.reduce((c, r) => c + (r.reminders || []).filter(rem => !rem.fired && new Date(rem.dueDate) <= new Date()).length, 0);
                   const total = dmUnread + groupUnread + remindersDue;
                   return total > 0 ? (
-                    <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-sm">
+                    <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-red-500 text-white text-[11px] font-bold rounded-full flex items-center justify-center shadow-sm">
                       {total}
                     </span>
                   ) : null;
@@ -677,7 +677,7 @@ const ModernHotelPMS = () => {
                 }`}
               >
                 <IconComponent className="w-5 h-5" />
-                <span className="text-[10px] font-medium">{tab.label}</span>
+                <span className="text-[11px] font-medium">{tab.label}</span>
                 {tab.id === 'messages' && (() => {
                   const dmUnread = messages.filter(m => m.to === currentUserId && !m.read).length;
                   const groupUnread = messages.filter(m => m.readBy && !m.readBy.includes(currentUserId) && m.from !== currentUserId).length;

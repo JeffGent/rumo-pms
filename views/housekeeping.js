@@ -167,6 +167,27 @@ const HousekeepingView = (props) => {
                       </span>
                     </>
                   )}
+                  {/* Extras with housekeepingList flag */}
+                  {(() => {
+                    const hkExtras = (res.extras || []).filter(ex => {
+                      if (ex.room && ex.room !== res.room) return false;
+                      const cat = extrasCatalog.find(c => c.name === ex.name);
+                      return cat && cat.housekeepingList;
+                    });
+                    if (hkExtras.length === 0) return null;
+                    return (
+                      <>
+                        {!(res.rooms && res.rooms[0] && res.rooms[0].housekeepingNote) && <div className="h-10 w-px bg-neutral-200 hidden md:block" />}
+                        <div className="hidden md:flex gap-1 flex-wrap">
+                          {hkExtras.map(ex => (
+                            <span key={ex.id} className="text-xs px-2 py-1 bg-blue-50 text-blue-700 rounded-lg">
+                              {ex.name}{ex.quantity > 1 ? ` x${ex.quantity}` : ''}
+                            </span>
+                          ))}
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
 
                 {/* Toggle Switch */}

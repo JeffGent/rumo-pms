@@ -45,7 +45,7 @@ const DashboardView = (props) => {
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-baseline gap-2">
                 <div className="text-xl md:text-2xl font-light tracking-tight font-serif text-neutral-900">{reservation.room}</div>
-                <div className="text-[0.65rem] font-medium tracking-widest uppercase text-neutral-400">
+                <div className="text-[0.82rem] font-medium tracking-widest uppercase text-neutral-400">
                   {reservation.visualStatus === 'blocked' ? 'Blocked' : reservation.isOption ? 'Option' : reservation.type}
                 </div>
               </div>
@@ -55,22 +55,22 @@ const DashboardView = (props) => {
             {reservation.visualStatus === 'blocked' ? (
               <div className={!isActive ? 'min-h-[2rem]' : ''}>
                 <div className="min-w-0">
-                  <div className="text-[0.82rem] font-medium text-slate-500 leading-tight flex items-center gap-1.5">
+                  <div className="text-[0.9rem] font-medium text-slate-500 leading-tight flex items-center gap-1.5">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                     Blocked
                   </div>
-                  {reservation.blockReason && <div className="text-[0.7rem] text-slate-400 mt-0.5 truncate">{reservation.blockReason}</div>}
+                  {reservation.blockReason && <div className="text-[0.82rem] text-slate-400 mt-0.5 truncate">{reservation.blockReason}</div>}
                   <div className="flex items-center justify-between mt-1">
-                    <span className="text-[0.7rem] text-slate-400">{formatDate(reservation.checkin)} – {formatDate(reservation.checkout)}</span>
+                    <span className="text-[0.82rem] text-slate-400">{formatDate(reservation.checkin)} – {formatDate(reservation.checkout)}</span>
                   </div>
                 </div>
               </div>
             ) : reservation.guest ? (
               <div className={!isActive ? 'min-h-[2rem]' : ''}>
                 <div className="min-w-0">
-                  <div className="text-[0.82rem] font-medium text-neutral-800 leading-tight">{reservation.guest}</div>
+                  <div className="text-[0.9rem] font-medium text-neutral-900 leading-tight">{reservation.guest}</div>
                   <div className="flex items-center justify-between mt-1">
-                    <span className="text-[0.7rem] text-neutral-500">
+                    <span className="text-[0.82rem] text-neutral-500">
                       {reservation.visualStatus === 'checked-out' ? `Checked out` :
                        reservation.status === 'departing' ? `Checking out today` :
                        reservation.visualStatus === 'reserved' ? `Check-in today` :
@@ -92,23 +92,23 @@ const DashboardView = (props) => {
                       if (!canCheckIn && !canCheckOut && !isCheckedIn && !isCheckedOut) return null;
                       if (canCheckIn) return (
                         <button onClick={(e) => { e.stopPropagation(); toggleCheckInOut(reservation.id, false); }}
-                          className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 hover:border-blue-300 transition-all" title="Check in">
+                          className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 hover:border-blue-300 transition-all" title="Check in">
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-2.5 h-2.5"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>IN
                         </button>
                       );
                       if (canCheckOut) return (
                         <button onClick={(e) => { e.stopPropagation(); toggleCheckInOut(reservation.id, true); }}
-                          className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-50 text-amber-600 border border-amber-200 hover:bg-amber-100 hover:border-amber-300 transition-all" title="Check out">
+                          className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-600 border border-amber-200 hover:bg-amber-100 hover:border-amber-300 transition-all" title="Check out">
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-2.5 h-2.5"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>OUT
                         </button>
                       );
                       if (isCheckedIn) return (
-                        <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-600 border border-emerald-200">
+                        <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-600 border border-emerald-200">
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="w-2.5 h-2.5"><polyline points="20 6 9 17 4 12"/></svg>IN
                         </span>
                       );
                       if (isCheckedOut) return (
-                        <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-neutral-100 text-neutral-400 border border-neutral-200">
+                        <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[11px] font-medium bg-neutral-100 text-neutral-400 border border-neutral-200">
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="w-2.5 h-2.5"><polyline points="20 6 9 17 4 12"/></svg>OUT
                         </span>
                       );
@@ -118,14 +118,14 @@ const DashboardView = (props) => {
                 </div>
                 {isActive && (
                   <div className="pt-3 mt-3 flex justify-between items-center" style={{ borderTop: '1px solid #f3f4f6' }}>
-                    <span className="text-[0.7rem] text-neutral-400">{Math.ceil((reservation.checkout - reservation.checkin) / (1000 * 60 * 60 * 24))} nights</span>
+                    <span className="text-[0.82rem] text-neutral-400">{Math.ceil((reservation.checkout - reservation.checkin) / (1000 * 60 * 60 * 24))} nights</span>
                     <span className="text-base font-medium text-neutral-800">€{reservation.price}</span>
                   </div>
                 )}
               </div>
             ) : (
               <div className="flex items-center justify-center min-h-[2rem]">
-                <span className="text-[0.78rem] text-neutral-300 font-normal">
+                <span className="text-[0.82rem] text-neutral-300 font-normal">
                   {reservation.status === 'maintenance' ? 'Under maintenance' : ''}
                 </span>
               </div>
@@ -181,7 +181,7 @@ const DashboardView = (props) => {
         const resolvedCheckedInTime = (typeof manualToggle === 'string') ? manualToggle : reservation.checkedInTime;
         return { ...reservation, status, visualStatus, resolvedCheckedInTime };
       } else {
-        return { id: `empty-${room}`, room, type: 'Standard', guest: null, status: 'available', housekeeping: 'clean' };
+        return { id: `empty-${room}`, room, type: getRoomTypeName(room), guest: null, status: 'available', housekeeping: 'clean' };
       }
     });
   };

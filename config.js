@@ -17,6 +17,34 @@ let hotelSettings = (() => {
 })();
 const saveHotelSettings = () => localStorage.setItem('hotelSettings', JSON.stringify(hotelSettings));
 
+// ── VAT Rates — persisted in localStorage ───────────────────────────────────
+let vatRates = (() => {
+  try {
+    const stored = localStorage.getItem('hotelVatRates');
+    if (stored) return JSON.parse(stored);
+  } catch (e) {}
+  return [
+    { id: 'vat-1', rate: 0,  label: 'Exempt',        schedule: [] },
+    { id: 'vat-2', rate: 6,  label: 'Reduced',        schedule: [] },
+    { id: 'vat-3', rate: 9,  label: 'Accommodation',  schedule: [] },
+    { id: 'vat-4', rate: 21, label: 'Standard',       schedule: [] },
+  ];
+})();
+const saveVatRates = () => localStorage.setItem('hotelVatRates', JSON.stringify(vatRates));
+
+// Helper: get effective VAT rate for a date (checks schedule entries)
+const getEffectiveVatRate = (baseRate, date) => {
+  const vr = vatRates.find(v => v.rate === baseRate);
+  if (!vr || !vr.schedule || vr.schedule.length === 0) return baseRate;
+  const d = date instanceof Date ? date.toISOString().slice(0, 10) : (typeof date === 'string' ? date.slice(0, 10) : null);
+  if (!d) return baseRate;
+  let effective = vr.rate;
+  [...vr.schedule].sort((a, b) => a.from.localeCompare(b.from)).forEach(s => {
+    if (s.from <= d) effective = s.newRate;
+  });
+  return effective;
+};
+
 // ── Room Type Catalog — persisted in localStorage ──────────────────────────
 let roomTypes = (() => {
   try {
@@ -76,24 +104,40 @@ let cancellationPolicies = (() => {
 })();
 const saveCancellationPolicies = () => localStorage.setItem('hotelCancellationPolicies', JSON.stringify(cancellationPolicies));
 
-// ── Unified extras catalog (used in both data generation and UI) ───────────
-const extrasCatalog = [
-  { name: 'Citytax', defaultPrice: 3, defaultVat: 6 },
-  { name: 'Parking', defaultPrice: 15, defaultVat: 6 },
-  { name: 'Breakfast Package', defaultPrice: 18, defaultVat: 6 },
-  { name: 'Dinner Package', defaultPrice: 45, defaultVat: 21 },
-  { name: 'Extra Bed', defaultPrice: 35, defaultVat: 6 },
-  { name: 'Extra Breakfast', defaultPrice: 18, defaultVat: 6 },
-  { name: 'Airport Transfer', defaultPrice: 75, defaultVat: 6 },
-  { name: 'Late Checkout', defaultPrice: 45, defaultVat: 6 },
-  { name: 'Early Checkin', defaultPrice: 30, defaultVat: 6 },
-  { name: 'Spa Access', defaultPrice: 25, defaultVat: 21 },
-  { name: 'Pet Fee', defaultPrice: 20, defaultVat: 6 },
-  { name: 'Rollaway Bed', defaultPrice: 25, defaultVat: 6 },
-  { name: 'Crib', defaultPrice: 0, defaultVat: 6 },
-  { name: 'Minibar', defaultPrice: 0, defaultVat: 21 },
-  { name: 'Safe', defaultPrice: 3, defaultVat: 6 },
-];
+// ── Extras catalog — persisted in localStorage ──────────────────────────────
+let extrasCatalog = (() => {
+  try {
+    const stored = localStorage.getItem('hotelExtrasCatalog');
+    if (stored) return JSON.parse(stored);
+  } catch (e) {}
+  return [
+    { id: 'ex-1',  name: 'Citytax',           defaultPrice: 3,  defaultVat: 6,  perPerson: true,  perNight: true,  multipleBookable: false, dailyInventory: false, dailyInventoryLimit: 0,  breakfast: false, lunch: false, dinner: false, housekeepingList: false, bookingEngine: false, upsellOnlineCheckin: false, multipleBookableLimit: 1, priceSchedule: [], photo: '' },
+    { id: 'ex-2',  name: 'Parking',           defaultPrice: 15, defaultVat: 6,  perPerson: false, perNight: true,  multipleBookable: false, dailyInventory: true,  dailyInventoryLimit: 8,  breakfast: false, lunch: false, dinner: false, housekeepingList: false, bookingEngine: true,  upsellOnlineCheckin: false, multipleBookableLimit: 1, priceSchedule: [], photo: '' },
+    { id: 'ex-3',  name: 'Breakfast Package', defaultPrice: 18, defaultVat: 6,  perPerson: true,  perNight: true,  multipleBookable: false, dailyInventory: false, dailyInventoryLimit: 0,  breakfast: true,  lunch: false, dinner: false, housekeepingList: false, bookingEngine: true,  upsellOnlineCheckin: true,  multipleBookableLimit: 1, priceSchedule: [], photo: '' },
+    { id: 'ex-4',  name: 'Dinner Package',    defaultPrice: 45, defaultVat: 21, perPerson: true,  perNight: true,  multipleBookable: false, dailyInventory: false, dailyInventoryLimit: 0,  breakfast: false, lunch: false, dinner: true,  housekeepingList: false, bookingEngine: true,  upsellOnlineCheckin: true,  multipleBookableLimit: 1, priceSchedule: [], photo: '' },
+    { id: 'ex-5',  name: 'Extra Bed',         defaultPrice: 35, defaultVat: 6,  perPerson: false, perNight: true,  multipleBookable: false, dailyInventory: false, dailyInventoryLimit: 0,  breakfast: false, lunch: false, dinner: false, housekeepingList: true,  bookingEngine: false, upsellOnlineCheckin: false, multipleBookableLimit: 1, priceSchedule: [], photo: '' },
+    { id: 'ex-6',  name: 'Extra Breakfast',   defaultPrice: 18, defaultVat: 6,  perPerson: true,  perNight: false, multipleBookable: true,  dailyInventory: false, dailyInventoryLimit: 0,  breakfast: true,  lunch: false, dinner: false, housekeepingList: false, bookingEngine: false, upsellOnlineCheckin: false, multipleBookableLimit: 1, priceSchedule: [], photo: '' },
+    { id: 'ex-7',  name: 'Airport Transfer',  defaultPrice: 75, defaultVat: 6,  perPerson: false, perNight: false, multipleBookable: false, dailyInventory: false, dailyInventoryLimit: 0,  breakfast: false, lunch: false, dinner: false, housekeepingList: false, bookingEngine: true,  upsellOnlineCheckin: false, multipleBookableLimit: 1, priceSchedule: [], photo: '' },
+    { id: 'ex-8',  name: 'Late Checkout',     defaultPrice: 45, defaultVat: 6,  perPerson: false, perNight: false, multipleBookable: false, dailyInventory: false, dailyInventoryLimit: 0,  breakfast: false, lunch: false, dinner: false, housekeepingList: false, bookingEngine: false, upsellOnlineCheckin: false, multipleBookableLimit: 1, priceSchedule: [], photo: '' },
+    { id: 'ex-9',  name: 'Early Checkin',     defaultPrice: 30, defaultVat: 6,  perPerson: false, perNight: false, multipleBookable: false, dailyInventory: false, dailyInventoryLimit: 0,  breakfast: false, lunch: false, dinner: false, housekeepingList: false, bookingEngine: false, upsellOnlineCheckin: false, multipleBookableLimit: 1, priceSchedule: [], photo: '' },
+    { id: 'ex-10', name: 'Spa Access',        defaultPrice: 25, defaultVat: 21, perPerson: true,  perNight: false, multipleBookable: false, dailyInventory: true,  dailyInventoryLimit: 15, breakfast: false, lunch: false, dinner: false, housekeepingList: false, bookingEngine: true,  upsellOnlineCheckin: true,  multipleBookableLimit: 1, priceSchedule: [], photo: '' },
+    { id: 'ex-11', name: 'Pet Fee',           defaultPrice: 20, defaultVat: 6,  perPerson: false, perNight: true,  multipleBookable: false, dailyInventory: false, dailyInventoryLimit: 0,  breakfast: false, lunch: false, dinner: false, housekeepingList: true,  bookingEngine: true,  upsellOnlineCheckin: false, multipleBookableLimit: 1, priceSchedule: [], photo: '' },
+    { id: 'ex-12', name: 'Rollaway Bed',      defaultPrice: 25, defaultVat: 6,  perPerson: false, perNight: true,  multipleBookable: false, dailyInventory: false, dailyInventoryLimit: 0,  breakfast: false, lunch: false, dinner: false, housekeepingList: true,  bookingEngine: false, upsellOnlineCheckin: false, multipleBookableLimit: 1, priceSchedule: [], photo: '' },
+    { id: 'ex-13', name: 'Crib',              defaultPrice: 0,  defaultVat: 6,  perPerson: false, perNight: false, multipleBookable: false, dailyInventory: false, dailyInventoryLimit: 0,  breakfast: false, lunch: false, dinner: false, housekeepingList: true,  bookingEngine: false, upsellOnlineCheckin: false, multipleBookableLimit: 1, priceSchedule: [], photo: '' },
+    { id: 'ex-14', name: 'Minibar',           defaultPrice: 0,  defaultVat: 21, perPerson: false, perNight: false, multipleBookable: true,  dailyInventory: false, dailyInventoryLimit: 0,  breakfast: false, lunch: false, dinner: false, housekeepingList: false, bookingEngine: false, upsellOnlineCheckin: false, multipleBookableLimit: 1, priceSchedule: [], photo: '' },
+    { id: 'ex-15', name: 'Safe',              defaultPrice: 3,  defaultVat: 6,  perPerson: false, perNight: true,  multipleBookable: false, dailyInventory: false, dailyInventoryLimit: 0,  breakfast: false, lunch: false, dinner: false, housekeepingList: false, bookingEngine: false, upsellOnlineCheckin: false, multipleBookableLimit: 1, priceSchedule: [], photo: '' },
+  ];
+})();
+const saveExtrasCatalog = () => localStorage.setItem('hotelExtrasCatalog', JSON.stringify(extrasCatalog));
+
+// Helper: get extra price for a given date (checks priceSchedule, falls back to defaultPrice)
+const getExtraPrice = (cat, date) => {
+  if (!cat.priceSchedule || cat.priceSchedule.length === 0) return cat.defaultPrice;
+  const d = typeof date === 'string' ? date.slice(0, 10) : (date instanceof Date ? date.toISOString().slice(0, 10) : null);
+  if (!d) return cat.defaultPrice;
+  const match = cat.priceSchedule.find(ps => ps.from <= d && ps.to >= d);
+  return match ? match.price : cat.defaultPrice;
+};
 
 // ── Profile stores — persisted separately in localStorage ──────────────────
 

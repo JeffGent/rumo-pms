@@ -714,7 +714,7 @@ const ReportsView = (props) => {
 
     // ── Occupancy Tab ──
     const OccupancyTab = () => {
-      const totalRoomCount = 14;
+      const totalRoomCount = getAllRooms().length;
 
       // Daily occupancy
       const days = [];
@@ -744,9 +744,8 @@ const ReportsView = (props) => {
       const periodRevPAR = days.length > 0 ? Math.round(totalPeriodRevenue / (days.length * totalRoomCount)) : 0;
 
       // By room type
-      const roomTypeMap = { '101': 'Standard', '102': 'Standard', '103': 'Deluxe', '104': 'Classic Twin', '105': 'Standard Triple',
-        '201': 'Suite', '202': 'Deluxe', '203': 'Classic Twin', '303': 'Suite', '401': 'Deluxe',
-        '403': 'Standard', '501': 'Suite', '502': 'Standard Triple', '503': 'Classic Twin' };
+      const roomTypeMap = {};
+      getAllRooms().forEach(r => { roomTypeMap[r] = getRoomTypeName(r); });
       const roomsByType = {};
       Object.values(roomTypeMap).forEach(t => { if (!roomsByType[t]) roomsByType[t] = 0; roomsByType[t]++; });
 

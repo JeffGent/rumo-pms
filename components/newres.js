@@ -26,7 +26,7 @@ const NewReservationModal = (props) => {
       setNewResInited(true);
     }
 
-    const allRoomNumbers = ['101','102','103','104','105','201','202','203','303','401','403','501','502','503'];
+    const allRoomNumbers = getAllRooms();
     const ciDate = newResCheckin ? new Date(newResCheckin) : null;
     const coDate = newResCheckout ? new Date(newResCheckout) : null;
     const validDates = ciDate && coDate && coDate > ciDate;
@@ -268,7 +268,7 @@ const NewReservationModal = (props) => {
 
           {/* Footer */}
           <div className="flex items-center justify-between px-4 md:px-6 py-4 border-t border-neutral-100 bg-neutral-50">
-            <kbd className="hidden md:inline-flex px-2 py-0.5 bg-white rounded-md text-[10px] font-medium text-neutral-400 border border-neutral-200">ESC to close</kbd>
+            <kbd className="hidden md:inline-flex px-2 py-0.5 bg-white rounded-md text-[11px] font-medium text-neutral-400 border border-neutral-200">ESC to close</kbd>
             <div className="flex gap-3 ml-auto">
               <button onClick={() => setNewReservationOpen(false)}
                 className="px-4 py-2 text-sm font-medium text-neutral-600 hover:text-neutral-900 transition-colors">
@@ -320,7 +320,7 @@ const NewReservationModal = (props) => {
                   id: newId,
                   guest: guestName || (status === 'blocked' ? '' : 'New Reservation'),
                   room: rooms[0],
-                  type: 'Standard',
+                  type: getRoomTypeName(rooms[0]),
                   checkin,
                   checkout,
                   reservationStatus: status,

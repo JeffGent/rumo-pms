@@ -94,7 +94,7 @@ const InvoiceModal = (props) => {
 
           {/* Footer */}
           <div className="flex items-center justify-between px-4 md:px-6 py-4 border-t border-neutral-100 bg-neutral-50 flex-shrink-0">
-            <kbd className="hidden md:inline-flex px-2 py-0.5 bg-white rounded-md text-[10px] font-medium text-neutral-400 border border-neutral-200">ESC to close</kbd>
+            <kbd className="hidden md:inline-flex px-2 py-0.5 bg-white rounded-md text-[11px] font-medium text-neutral-400 border border-neutral-200">ESC to close</kbd>
             <div className="flex gap-2 ml-auto">
               <button onClick={() => { const w = window.open('', '_blank'); w.document.write('<pre style="font-family:system-ui;font-size:14px;padding:40px">' + getInvoiceText() + '</pre>'); w.document.title = 'Invoice'; w.print(); }}
                 className="px-3 md:px-4 py-2 flex items-center gap-2 bg-white border border-neutral-200 rounded-xl text-sm font-medium text-neutral-700 hover:bg-neutral-100 transition-colors">

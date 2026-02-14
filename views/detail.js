@@ -20,6 +20,9 @@ const ReservationDetailView = (props) => {
   const ed = editingReservation;
   if (!reservation || !ed) return null;
   const [pricingOpen, setPricingOpen] = React.useState({});
+  const [inventoryPopup, setInventoryPopup] = React.useState(null); // { catName, nights: [{ date, label, used, limit, full }], qty, cat, ci, co }
+  const [inventorySelected, setInventorySelected] = React.useState(new Set()); // selected night indices
+  const inventoryPendingRef = React.useRef(false); // guard against select double-fire
 
   const pageLabels = { dashboard: 'Dashboard', calendar: 'Calendar', housekeeping: 'Housekeeping', fb: 'F&B', reports: 'Reports' };
   const edCheckin = ed.checkin ? new Date(ed.checkin) : reservation.checkin;
@@ -796,7 +799,7 @@ const ReservationDetailView = (props) => {
                             setEditingReservation(next);
                             setToastMessage('Reminder added');
                           }}
-                            className={`px-2 py-1 text-[11px] font-medium rounded-lg border transition-all ${opt.custom ? 'border-neutral-300 text-neutral-500 hover:bg-white' : 'border-neutral-200 bg-white text-neutral-700 hover:border-neutral-900 hover:text-neutral-900'}`}>
+                            className={`px-2 py-1 text-xs font-medium rounded-lg border transition-all ${opt.custom ? 'border-neutral-300 text-neutral-500 hover:bg-white' : 'border-neutral-200 bg-white text-neutral-700 hover:border-neutral-900 hover:text-neutral-900'}`}>
                             {opt.label}
                           </button>
                         ))}
@@ -835,7 +838,7 @@ const ReservationDetailView = (props) => {
                           <div className={`w-1.5 h-1.5 mt-1.5 rounded-full flex-shrink-0 ${rem.fired ? 'bg-neutral-300' : isPending ? 'bg-amber-400 animate-pulse' : 'bg-blue-400'}`} />
                           <div className="flex-1 min-w-0">
                             <div className={`text-xs ${rem.fired ? 'text-neutral-400 line-through' : 'text-neutral-900'}`}>{rem.message}</div>
-                            <div className="text-[10px] text-neutral-400">
+                            <div className="text-xs text-neutral-400">
                               {new Date(rem.dueDate).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                             </div>
                           </div>
@@ -939,11 +942,11 @@ const ReservationDetailView = (props) => {
                     <table className="w-full">
                       <thead>
                         <tr className="bg-neutral-50 border-b border-neutral-200">
-                          <th className="px-2.5 py-1.5 text-left text-[10px] font-medium text-neutral-400 uppercase tracking-wider w-20">Room</th>
-                          <th className="px-2.5 py-1.5 text-left text-[10px] font-medium text-neutral-400 uppercase tracking-wider w-28">Status</th>
-                          <th className="px-2.5 py-1.5 text-left text-[10px] font-medium text-neutral-400 uppercase tracking-wider">Guest</th>
-                          <th className="px-2.5 py-1.5 text-left text-[10px] font-medium text-neutral-400 uppercase tracking-wider w-20">Pricing</th>
-                          <th className="px-2.5 py-1.5 text-right text-[10px] font-medium text-neutral-400 uppercase tracking-wider w-24">Price (€)</th>
+                          <th className="px-2.5 py-1.5 text-left text-xs font-medium text-neutral-400 uppercase tracking-wider w-20">Room</th>
+                          <th className="px-2.5 py-1.5 text-left text-xs font-medium text-neutral-400 uppercase tracking-wider w-28">Status</th>
+                          <th className="px-2.5 py-1.5 text-left text-xs font-medium text-neutral-400 uppercase tracking-wider">Guest</th>
+                          <th className="px-2.5 py-1.5 text-left text-xs font-medium text-neutral-400 uppercase tracking-wider w-20">Pricing</th>
+                          <th className="px-2.5 py-1.5 text-right text-xs font-medium text-neutral-400 uppercase tracking-wider w-24">Price (€)</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1001,7 +1004,7 @@ const ReservationDetailView = (props) => {
                               </td>
                               <td className="px-2.5 py-1" rowSpan={guestCount}>
                                 <select value={room.priceType} onChange={(e) => { const nv = e.target.value; if (nv !== room.priceType) updateEd(`rooms.${ri}.priceType`, nv, `Room ${room.roomNumber}: pricing ${room.priceType} → ${nv}`); }}
-                                  className="w-full px-1.5 py-1 bg-transparent border border-neutral-200 rounded-lg text-[11px] focus:outline-none focus:ring-2 focus:ring-neutral-900 appearance-none cursor-pointer">
+                                  className="w-full px-1.5 py-1 bg-transparent border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 appearance-none cursor-pointer">
                                   <option value="fixed">Fixed</option>
                                   <option value="per-night">Per Night</option>
                                 </select>
@@ -1072,7 +1075,7 @@ const ReservationDetailView = (props) => {
                                   setToastMessage(`All ${next.rooms.length} rooms set to €${val.toFixed(2)}`);
                                   document.getElementById('quickEditBulkPrice').value = '';
                                 }}
-                                className="px-2 py-1 bg-neutral-900 text-white rounded-lg text-[10px] font-medium hover:bg-neutral-800 transition-colors">Apply</button>
+                                className="px-2 py-1 bg-neutral-900 text-white rounded-lg text-xs font-medium hover:bg-neutral-800 transition-colors">Apply</button>
                               <span className="text-xs font-bold text-neutral-900 pl-1">€{gridTotal.toFixed(2)}</span>
                             </div>
                           </td>
@@ -1205,7 +1208,7 @@ const ReservationDetailView = (props) => {
                     <div className="px-4 py-3 bg-neutral-50/80 border-b border-neutral-100" onClick={(e) => e.stopPropagation()}>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-2">
                         <div>
-                          <div className="text-[10px] font-medium text-neutral-400 uppercase tracking-wider mb-0.5">Status</div>
+                          <div className="text-xs font-medium text-neutral-400 uppercase tracking-wider mb-0.5">Status</div>
                           <select value={room.status || 'confirmed'} onChange={(e) => updateRoomStatus(ri, e.target.value)}
                             className={`w-full px-2 py-1 rounded-lg text-xs font-semibold border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-neutral-900 ${
                               ({ confirmed: 'bg-blue-100 text-blue-800', option: 'bg-pink-100 text-pink-800', 'checked-in': 'bg-emerald-100 text-emerald-800', 'checked-out': 'bg-neutral-200 text-neutral-600', 'no-show': 'bg-red-100 text-red-800', cancelled: 'bg-red-100 text-red-800', blocked: 'bg-slate-200 text-slate-800' })[room.status || 'confirmed'] || 'bg-blue-100 text-blue-800'
@@ -1220,7 +1223,7 @@ const ReservationDetailView = (props) => {
                           </select>
                         </div>
                         <div>
-                          <div className="text-[10px] font-medium text-neutral-400 uppercase tracking-wider mb-0.5">Rate Plan</div>
+                          <div className="text-xs font-medium text-neutral-400 uppercase tracking-wider mb-0.5">Rate Plan</div>
                           <div className="flex items-center gap-1.5">
                             <select value={room.ratePlanId || ratePlans[0]?.id || ''} onChange={(e) => updateEd(`rooms.${ri}.ratePlanId`, e.target.value)}
                               className="flex-1 min-w-0 px-2 py-1 rounded-lg text-xs font-medium bg-white border border-neutral-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-neutral-900">
@@ -1234,7 +1237,7 @@ const ReservationDetailView = (props) => {
                           </div>
                         </div>
                         <div>
-                          <div className="text-[10px] font-medium text-neutral-400 uppercase tracking-wider mb-0.5">Check-in</div>
+                          <div className="text-xs font-medium text-neutral-400 uppercase tracking-wider mb-0.5">Check-in</div>
                           <input type="date" onKeyDown={noTypeDateKey}
                             value={room.checkin ? (room.checkin instanceof Date ? room.checkin.toISOString().slice(0, 10) : new Date(room.checkin).toISOString().slice(0, 10)) : ''}
                             onChange={(e) => {
@@ -1250,7 +1253,7 @@ const ReservationDetailView = (props) => {
                             className="w-full px-2 py-1 rounded-lg text-xs bg-white border border-neutral-200 focus:outline-none focus:ring-2 focus:ring-neutral-900 cursor-pointer" />
                         </div>
                         <div>
-                          <div className="text-[10px] font-medium text-neutral-400 uppercase tracking-wider mb-0.5">Check-out</div>
+                          <div className="text-xs font-medium text-neutral-400 uppercase tracking-wider mb-0.5">Check-out</div>
                           <input type="date" onKeyDown={noTypeDateKey}
                             value={room.checkout ? (room.checkout instanceof Date ? room.checkout.toISOString().slice(0, 10) : new Date(room.checkout).toISOString().slice(0, 10)) : ''}
                             onChange={(e) => {
@@ -1268,7 +1271,7 @@ const ReservationDetailView = (props) => {
                       </div>
                       {(room.status || 'confirmed') === 'option' && (
                         <div className="flex items-center gap-2 mt-2">
-                          <div className="text-[10px] font-medium text-neutral-400 uppercase tracking-wider">Option expires</div>
+                          <div className="text-xs font-medium text-neutral-400 uppercase tracking-wider">Option expires</div>
                           <input type="datetime-local" value={room.optionExpiry || ''} onChange={(e) => updateEd(`rooms.${ri}.optionExpiry`, e.target.value)}
                             className="px-2 py-1 bg-pink-50 border border-pink-200 rounded-lg text-xs text-pink-700 focus:outline-none focus:ring-1 focus:ring-pink-300" />
                           {room.optionExpiry && (
@@ -1305,8 +1308,8 @@ const ReservationDetailView = (props) => {
                               <table className="w-full">
                                 <thead>
                                   <tr className="border-b border-neutral-200">
-                                    <th className="px-3 py-1.5 text-left text-[10px] font-medium text-neutral-500 uppercase">Date</th>
-                                    <th className="px-3 py-1.5 text-right text-[10px] font-medium text-neutral-500 uppercase">Rate</th>
+                                    <th className="px-3 py-1.5 text-left text-xs font-medium text-neutral-500 uppercase">Date</th>
+                                    <th className="px-3 py-1.5 text-right text-xs font-medium text-neutral-500 uppercase">Rate</th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -1317,7 +1320,7 @@ const ReservationDetailView = (props) => {
                                       </td>
                                       <td className="px-3 py-1 text-right">
                                         <div className="relative inline-block">
-                                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-neutral-400">EUR</span>
+                                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-neutral-400">EUR</span>
                                           <input type="number" value={night.amount}
                                             onChange={(e) => {
                                               const next = JSON.parse(JSON.stringify(ed));
@@ -1531,12 +1534,12 @@ const ReservationDetailView = (props) => {
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-neutral-200 bg-neutral-50/80">
-                        <th className="px-3 py-2 text-left text-[10px] font-medium text-neutral-400 uppercase tracking-wider w-16">Qty</th>
-                        <th className="px-3 py-2 text-left text-[10px] font-medium text-neutral-400 uppercase tracking-wider">Name</th>
-                        <th className="px-3 py-2 text-left text-[10px] font-medium text-neutral-400 uppercase tracking-wider w-20">Room</th>
-                        <th className="px-3 py-2 text-left text-[10px] font-medium text-neutral-400 uppercase tracking-wider w-16">VAT %</th>
-                        <th className="px-3 py-2 text-right text-[10px] font-medium text-neutral-400 uppercase tracking-wider w-28">Unit Price</th>
-                        <th className="px-3 py-2 text-right text-[10px] font-medium text-neutral-400 uppercase tracking-wider w-28">Total</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-neutral-400 uppercase tracking-wider w-16">Qty</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-neutral-400 uppercase tracking-wider">Name</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-neutral-400 uppercase tracking-wider w-20">Room</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-neutral-400 uppercase tracking-wider w-16">VAT %</th>
+                        <th className="px-3 py-2 text-right text-xs font-medium text-neutral-400 uppercase tracking-wider w-28">Unit Price</th>
+                        <th className="px-3 py-2 text-right text-xs font-medium text-neutral-400 uppercase tracking-wider w-28">Total</th>
                         <th className="px-2 py-2 w-8"></th>
                       </tr>
                     </thead>
@@ -1545,8 +1548,21 @@ const ReservationDetailView = (props) => {
                         <tr key={extra.id} className="border-b border-neutral-100 last:border-0">
                           <td className="px-3 py-1.5">
                             <input type="number" min="1" value={extra.quantity} onChange={(e) => {
+                              let newQty = parseInt(e.target.value) || 1;
+                              const cat = extrasCatalog.find(c => c.name === extra.name);
+                              if (cat && !cat.multipleBookable) {
+                                const guests = ed.guestCount || 1;
+                                const ci = ed.rooms?.[0] ? new Date(ed.rooms[0].checkin) : new Date(ed.checkin);
+                                const co = ed.rooms?.[0] ? new Date(ed.rooms[0].checkout) : new Date(ed.checkout);
+                                const nights = Math.max(1, Math.round((co - ci) / 86400000));
+                                let autoMax = 1;
+                                if (cat.perPerson && cat.perNight) autoMax = guests * nights;
+                                else if (cat.perPerson) autoMax = guests;
+                                else if (cat.perNight) autoMax = nights;
+                                newQty = Math.min(newQty, Math.max(1, autoMax));
+                              }
                               const next = JSON.parse(JSON.stringify(ed));
-                              next.extras[ei].quantity = parseInt(e.target.value) || 1;
+                              next.extras[ei].quantity = newQty;
                               setEditingReservation(next);
                             }} className="w-12 px-2 py-1 bg-white border border-neutral-200 rounded-lg text-xs text-center focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent" />
                           </td>
@@ -1569,15 +1585,12 @@ const ReservationDetailView = (props) => {
                               next.extras[ei].vatRate = parseInt(e.target.value);
                               setEditingReservation(next);
                             }} className="w-full px-1 py-1 bg-white border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent">
-                              <option value="0">0</option>
-                              <option value="6">6</option>
-                              <option value="9">9</option>
-                              <option value="21">21</option>
+                              {vatRates.map(vr => <option key={vr.id} value={vr.rate}>{vr.rate}</option>)}
                             </select>
                           </td>
                           <td className="px-3 py-1.5 text-right">
                             <div className="relative inline-block">
-                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-neutral-400">€</span>
+                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-neutral-400">€</span>
                               <input type="number" step="0.01" min="0" value={extra.unitPrice} onChange={(e) => {
                                 const next = JSON.parse(JSON.stringify(ed));
                                 next.extras[ei].unitPrice = parseFloat(e.target.value) || 0;
@@ -1609,20 +1622,93 @@ const ReservationDetailView = (props) => {
                         <td className="px-3 py-1.5" colSpan="3">
                           <select id="newExtraName" defaultValue="" onChange={(e) => {
                             if (!e.target.value) return;
+                            if (inventoryPendingRef.current) { e.target.value = ''; return; }
                             const cat = extrasCatalog.find(c => c.name === e.target.value);
                             const qtyEl = document.getElementById('newExtraQty');
-                            const qty = parseInt(qtyEl?.value) || 1;
+                            let qty = parseInt(qtyEl?.value) || 1;
+
+                            // Auto-calculate quantity based on catalog flags
+                            if (cat) {
+                              const guests = ed.guestCount || 1;
+                              const ci = ed.rooms?.[0] ? new Date(ed.rooms[0].checkin) : new Date(ed.checkin);
+                              const co = ed.rooms?.[0] ? new Date(ed.rooms[0].checkout) : new Date(ed.checkout);
+                              const nights = Math.max(1, Math.round((co - ci) / 86400000));
+                              let autoQty = 1;
+                              if (cat.perPerson && cat.perNight) autoQty = guests * nights;
+                              else if (cat.perPerson) autoQty = guests;
+                              else if (cat.perNight) autoQty = nights;
+                              // Use auto-qty if user hasn't manually changed from default
+                              if (qty === 1 && autoQty > 1) qty = autoQty;
+                              // Cap if not multipleBookable
+                              if (!cat.multipleBookable && qty > Math.max(1, autoQty)) qty = Math.max(1, autoQty);
+
+                              // Daily inventory check — show popup if any night is full
+                              if (cat.dailyInventory && cat.dailyInventoryLimit > 0) {
+                                const ci2 = new Date(ci); ci2.setHours(0,0,0,0);
+                                const co2 = new Date(co); co2.setHours(0,0,0,0);
+                                const nightsInfo = [];
+                                let hasFullNight = false;
+                                for (let d = new Date(ci2); d < co2; d.setDate(d.getDate() + 1)) {
+                                  let dayCount = 0;
+                                  // Count extras from OTHER reservations
+                                  reservations.forEach(r => {
+                                    if (r.id === ed.id) return;
+                                    const st = r.reservationStatus || 'confirmed';
+                                    if (st === 'cancelled' || st === 'no-show' || st === 'blocked') return;
+                                    const rCi = new Date(r.checkin); rCi.setHours(0,0,0,0);
+                                    const rCo = new Date(r.checkout); rCo.setHours(0,0,0,0);
+                                    if (d >= rCi && d < rCo) {
+                                      const rNights = Math.max(1, Math.round((rCo - rCi) / 86400000));
+                                      (r.extras || []).forEach(ex => {
+                                        if (ex.name === cat.name) {
+                                          dayCount += cat.perNight ? Math.round(ex.quantity / rNights) : ex.quantity;
+                                        }
+                                      });
+                                    }
+                                  });
+                                  // Also count extras already on the CURRENT reservation
+                                  const edNights = Math.max(1, Math.round((co2 - ci2) / 86400000));
+                                  (ed.extras || []).forEach(ex => {
+                                    if (ex.name === cat.name) {
+                                      dayCount += cat.perNight ? Math.round(ex.quantity / edNights) : ex.quantity;
+                                    }
+                                  });
+                                  const full = dayCount >= cat.dailyInventoryLimit;
+                                  if (full) hasFullNight = true;
+                                  nightsInfo.push({
+                                    date: new Date(d).toISOString().slice(0, 10),
+                                    label: new Date(d).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }),
+                                    used: dayCount,
+                                    limit: cat.dailyInventoryLimit,
+                                    full,
+                                  });
+                                }
+                                if (hasFullNight) {
+                                  // Show popup — pre-select only available nights
+                                  inventoryPendingRef.current = true;
+                                  const preSelected = new Set(nightsInfo.map((n, i) => !n.full ? i : null).filter(i => i !== null));
+                                  setInventorySelected(preSelected);
+                                  setInventoryPopup({ catName: cat.name, nights: nightsInfo, qty, cat, ci, co });
+                                  e.target.value = '';
+                                  if (qtyEl) qtyEl.value = '1';
+                                  return; // Don't add yet — user decides in popup
+                                }
+                              }
+                            }
+
+                            // Add extra directly (no inventory issues)
                             const next = JSON.parse(JSON.stringify(ed));
                             const newId = (next.extras || []).reduce((max, x) => Math.max(max, x.id || 0), 0) + 1;
                             next.extras = next.extras || [];
                             const extraName = cat ? cat.name : e.target.value;
+                            const ci = ed.rooms?.[0] ? new Date(ed.rooms[0].checkin) : new Date(ed.checkin);
                             next.extras.push({
                               id: newId,
                               name: extraName,
                               quantity: qty,
                               room: null,
-                              vatRate: cat ? cat.defaultVat : 6,
-                              unitPrice: cat ? cat.defaultPrice : 0
+                              vatRate: cat ? cat.defaultVat : (vatRates[0]?.rate ?? 6),
+                              unitPrice: cat ? getExtraPrice(cat, ci) : 0
                             });
                             next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Extra added: ${extraName} x${qty}`, user: 'Sophie' });
                             setEditingReservation(next);
@@ -1630,9 +1716,11 @@ const ReservationDetailView = (props) => {
                             if (qtyEl) qtyEl.value = '1';
                           }} className="w-full px-2 py-1 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent cursor-pointer">
                             <option value="" disabled>+ Add extra...</option>
-                            {extrasCatalog.map(c => (
-                              <option key={c.name} value={c.name}>{c.name} {c.defaultPrice > 0 ? `(€${c.defaultPrice})` : ''}</option>
-                            ))}
+                            {extrasCatalog.map(c => {
+                              const ci = ed.rooms?.[0] ? new Date(ed.rooms[0].checkin) : new Date(ed.checkin);
+                              const price = getExtraPrice(c, ci);
+                              return <option key={c.name} value={c.name}>{c.name} {price > 0 ? `(€${price})` : ''}</option>;
+                            })}
                           </select>
                         </td>
                         <td className="px-3 py-1.5 text-right text-xs text-neutral-400">€</td>
@@ -1657,7 +1745,7 @@ const ReservationDetailView = (props) => {
 
               {/* Add Room — with date pickers + availability check */}
               {(() => {
-                const allRoomNumbers = ['101','102','103','104','105','201','202','203','303','401','403','501','502','503'];
+                const allRoomNumbers = getAllRooms();
                 const usedRooms = ed.rooms.map(r => r.roomNumber);
 
                 const addCi = addRoomDates.checkin ? new Date(addRoomDates.checkin) : null;
@@ -1683,14 +1771,14 @@ const ReservationDetailView = (props) => {
                   <div ref={addRoomRef} className="bg-white border border-neutral-200 rounded-2xl p-4">
                     <div className="flex items-center justify-between mb-3">
                       <div className="text-xs font-medium text-neutral-400 uppercase tracking-wider">Add rooms</div>
-                      <div className="flex items-center gap-1.5 text-[11px] text-neutral-500">
+                      <div className="flex items-center gap-1.5 text-xs text-neutral-500">
                         <input type="date" value={addRoomDates.checkin} onKeyDown={noTypeDateKey}
                           onChange={(e) => setAddRoomDates(prev => ({ ...prev, checkin: e.target.value }))}
-                          className="px-1.5 py-0.5 bg-neutral-50 border border-neutral-200 rounded-md text-[11px] w-[105px] focus:outline-none focus:ring-1 focus:ring-neutral-400" />
+                          className="px-1.5 py-0.5 bg-neutral-50 border border-neutral-200 rounded-md text-xs w-[105px] focus:outline-none focus:ring-1 focus:ring-neutral-400" />
                         <span className="text-neutral-300">&rarr;</span>
                         <input type="date" value={addRoomDates.checkout} onKeyDown={noTypeDateKey}
                           onChange={(e) => setAddRoomDates(prev => ({ ...prev, checkout: e.target.value }))}
-                          className="px-1.5 py-0.5 bg-neutral-50 border border-neutral-200 rounded-md text-[11px] w-[105px] focus:outline-none focus:ring-1 focus:ring-neutral-400" />
+                          className="px-1.5 py-0.5 bg-neutral-50 border border-neutral-200 rounded-md text-xs w-[105px] focus:outline-none focus:ring-1 focus:ring-neutral-400" />
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-1.5">
@@ -1754,6 +1842,7 @@ const ReservationDetailView = (props) => {
               });
               const checkIn = reservation.checkin ? new Date(reservation.checkin).toLocaleDateString('en-GB') : '';
               const checkOut = reservation.checkout ? new Date(reservation.checkout).toLocaleDateString('en-GB') : '';
+              const cur = hotelSettings.currency || 'EUR';
               const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${inv.number}</title>
 <style>
 @page { size: A4; margin: 0; }
@@ -1790,8 +1879,8 @@ td:last-child { text-align: right; font-weight: 500; }
 </style></head><body>
 <div class="header">
 <div>
-  <div class="hotel">RUMO</div>
-  <div class="hotel-details">Rumo Boutique Hotel<br>Keizerslei 42, 2000 Antwerpen<br>BTW BE0123.456.789<br>info@rumohotel.be · +32 3 123 45 67</div>
+  <div class="hotel">${(hotelSettings.hotelName || 'Hotel').split(' ')[0].toUpperCase()}</div>
+  <div class="hotel-details">${hotelSettings.hotelName || ''}<br>${hotelSettings.hotelAddress || ''}<br>BTW ${hotelSettings.hotelVat || ''}<br>${hotelSettings.hotelEmail || ''} · ${hotelSettings.hotelPhone || ''}</div>
 </div>
 <div class="invoice-title">
   <h2>${isCredit ? 'CREDIT NOTE' : inv.type === 'proforma' ? 'PROFORMA' : 'INVOICE'}</h2>
@@ -1823,16 +1912,16 @@ td:last-child { text-align: right; font-weight: 500; }
 <table>
 <thead><tr><th>Description</th><th>VAT</th><th style="text-align:right;">Amount</th></tr></thead>
 <tbody>
-  ${(inv.items || []).map(item => '<tr><td>' + item.label + (item.detail ? '<div class="item-detail">' + item.detail + '</div>' : '') + '</td><td>' + (item.vatRate || 0) + '%</td><td>EUR ' + item.amount.toFixed(2) + '</td></tr>').join('')}
+  ${(inv.items || []).map(item => '<tr><td>' + item.label + (item.detail ? '<div class="item-detail">' + item.detail + '</div>' : '') + '</td><td>' + (item.vatRate || 0) + '%</td><td>' + cur + ' ' + item.amount.toFixed(2) + '</td></tr>').join('')}
 </tbody>
 </table>
 <div class="totals">
-${Object.entries(vatGroups).map(([rate, g]) => '<div class="row vat"><span>Net (' + rate + '% VAT)</span><span>EUR ' + g.net.toFixed(2) + '</span></div><div class="row vat"><span>VAT ' + rate + '%</span><span>EUR ' + g.vat.toFixed(2) + '</span></div>').join('')}
-<div class="row total"><span>Total</span><span>EUR ${inv.amount.toFixed(2)}</span></div>
+${Object.entries(vatGroups).map(([rate, g]) => '<div class="row vat"><span>Net (' + rate + '% VAT)</span><span>' + cur + ' ' + g.net.toFixed(2) + '</span></div><div class="row vat"><span>VAT ' + rate + '%</span><span>' + cur + ' ' + g.vat.toFixed(2) + '</span></div>').join('')}
+<div class="row total"><span>Total</span><span>${cur} ${inv.amount.toFixed(2)}</span></div>
 </div>
-${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPayments.map(p => '<div class="pay-row"><span class="pay-method">' + p.method + ' · ' + p.date + '</span><span>EUR ' + p.amount.toFixed(2) + '</span></div>').join('') + (invPaid < inv.amount && !isCredit ? '<div class="pay-row due"><span>Amount due</span><span>EUR ' + (inv.amount - invPaid).toFixed(2) + '</span></div>' : '') + '</div>' : ''}
+${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPayments.map(p => '<div class="pay-row"><span class="pay-method">' + p.method + ' · ' + p.date + '</span><span>' + cur + ' ' + p.amount.toFixed(2) + '</span></div>').join('') + (invPaid < inv.amount && !isCredit ? '<div class="pay-row due"><span>Amount due</span><span>' + cur + ' ' + (inv.amount - invPaid).toFixed(2) + '</span></div>' : '') + '</div>' : ''}
 <div class="ref">Booking ref: ${ed.bookingRef || '—'}${ed.otaRef ? ' · OTA ref: ' + ed.otaRef : ''}</div>
-<div class="footer">Rumo Boutique Hotel · Keizerslei 42, 2000 Antwerpen · BE0123.456.789 · IBAN BE68 5390 0754 7034</div>
+<div class="footer">${hotelSettings.hotelName || ''} · ${hotelSettings.hotelAddress || ''} · ${hotelSettings.hotelVat || ''}</div>
 </body></html>`;
               let iframe = document.getElementById('_printFrame');
               if (!iframe) { iframe = document.createElement('iframe'); iframe.id = '_printFrame'; iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:0;height:0;border:none;'; document.body.appendChild(iframe); }
@@ -2903,6 +2992,105 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
           </>)}
         </div>
       </div>
+
+      {/* Inventory Availability Popup */}
+      {inventoryPopup && (() => {
+        const p = inventoryPopup;
+        const availableNights = p.nights.filter(n => !n.full).length;
+        const totalNights = p.nights.length;
+        const selectedCount = inventorySelected.size;
+        // For perNight extras, qty = selected nights. Otherwise use original auto-qty.
+        const selectedQty = p.cat?.perNight ? selectedCount : p.qty;
+        return (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => { inventoryPendingRef.current = false; setInventoryPopup(null); }}>
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
+              {/* Header */}
+              <div className="px-5 pt-5 pb-3">
+                <div className="flex items-center gap-3 mb-1">
+                  <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-amber-600"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-neutral-900">{p.catName} — Limited Availability</h3>
+                    <p className="text-xs text-neutral-500">{availableNights} of {totalNights} nights available · {selectedCount} selected</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Night-by-night list */}
+              <div className="px-5 pb-3">
+                <div className="border border-neutral-200 rounded-xl overflow-hidden">
+                  {p.nights.map((n, i) => {
+                    const checked = inventorySelected.has(i);
+                    return (
+                      <label key={n.date} className={`flex items-center justify-between px-3 py-2 text-xs cursor-pointer ${i > 0 ? 'border-t border-neutral-100' : ''} ${n.full ? 'bg-red-50' : checked ? 'bg-emerald-50' : 'bg-white'} hover:bg-neutral-50 transition-colors`}>
+                        <div className="flex items-center gap-2">
+                          <input type="checkbox" checked={checked} onChange={() => {
+                            setInventorySelected(prev => {
+                              const next = new Set(prev);
+                              if (next.has(i)) next.delete(i); else next.add(i);
+                              return next;
+                            });
+                          }} className="rounded border-neutral-300 w-3.5 h-3.5" />
+                          <span className={`font-medium ${n.full ? 'text-red-800' : 'text-neutral-700'}`}>{n.label}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1">
+                            <div className={`w-16 h-1.5 rounded-full overflow-hidden ${n.full ? 'bg-red-200' : 'bg-neutral-200'}`}>
+                              <div className={`h-full rounded-full ${n.full ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min(100, (n.used / n.limit) * 100)}%` }} />
+                            </div>
+                            <span className={`tabular-nums ${n.full ? 'text-red-700 font-semibold' : 'text-neutral-500'}`}>{n.used}/{n.limit}</span>
+                          </div>
+                          {n.full && <span className="px-1.5 py-0.5 bg-red-100 text-red-700 rounded text-xs font-semibold uppercase">Full</span>}
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="px-5 pb-5 flex items-center justify-between">
+                <button onClick={() => {
+                  // Select all / deselect all toggle
+                  if (selectedCount === totalNights) setInventorySelected(new Set());
+                  else setInventorySelected(new Set(p.nights.map((_, i) => i)));
+                }} className="text-xs text-neutral-500 hover:text-neutral-700 transition-colors">
+                  {selectedCount === totalNights ? 'Deselect all' : 'Select all'}
+                </button>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => { inventoryPendingRef.current = false; setInventoryPopup(null); }}
+                    className="px-4 py-2 text-xs font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded-xl transition-colors">
+                    Cancel
+                  </button>
+                  <button disabled={selectedCount === 0} onClick={() => {
+                    inventoryPendingRef.current = false;
+                    const next = JSON.parse(JSON.stringify(ed));
+                    const newId = (next.extras || []).reduce((max, x) => Math.max(max, x.id || 0), 0) + 1;
+                    next.extras = next.extras || [];
+                    const ciDate = ed.rooms?.[0] ? new Date(ed.rooms[0].checkin) : new Date(ed.checkin);
+                    next.extras.push({
+                      id: newId,
+                      name: p.catName,
+                      quantity: selectedQty,
+                      room: null,
+                      vatRate: p.cat ? p.cat.defaultVat : (vatRates[0]?.rate ?? 6),
+                      unitPrice: p.cat ? getExtraPrice(p.cat, ciDate) : 0,
+                    });
+                    next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Extra added: ${p.catName} x${selectedQty}`, user: 'Sophie' });
+                    setEditingReservation(next);
+                    setInventoryPopup(null);
+                  }}
+                    className={`px-4 py-2 text-xs font-medium rounded-xl transition-colors ${selectedCount === 0 ? 'bg-neutral-200 text-neutral-400 cursor-not-allowed' : 'text-white bg-neutral-900 hover:bg-neutral-800'}`}>
+                    Add{selectedCount > 0 ? ` (${selectedQty} ${selectedQty === 1 ? 'night' : 'nights'})` : ''}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
     </div>
   );
 };

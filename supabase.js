@@ -55,7 +55,7 @@ const restUpsert = async (table, rows, onConflict) => {
 const syncAllReservations = async (resList) => {
   setSyncStatus('syncing');
   try {
-    const rows = resList.map(res => ({
+    const rawRows = resList.map(res => ({
       booking_ref: res.bookingRef,
       checkin: res.checkin instanceof Date ? res.checkin.toISOString().slice(0, 10) : (res.checkin || '').slice(0, 10),
       checkout: res.checkout instanceof Date ? res.checkout.toISOString().slice(0, 10) : (res.checkout || '').slice(0, 10),
@@ -63,6 +63,8 @@ const syncAllReservations = async (resList) => {
       guest_name: res.guest || `${res.booker?.firstName || ''} ${res.booker?.lastName || ''}`.trim(),
       data: res,
     }));
+    // Deduplicate by booking_ref (last wins) — prevents PG "cannot affect row a second time" error
+    const rows = [...new Map(rawRows.map(r => [r.booking_ref, r])).values()];
 
     // Upsert in batches of 50 (PostgREST limit safe)
     for (let i = 0; i < rows.length; i += 50) {
@@ -167,6 +169,8 @@ const initialSync = async () => {
       { key: 'roomTypes', data: roomTypes, updated_at: new Date().toISOString() },
       { key: 'ratePlans', data: ratePlans, updated_at: new Date().toISOString() },
       { key: 'cancellationPolicies', data: cancellationPolicies, updated_at: new Date().toISOString() },
+      { key: 'extrasCatalog', data: extrasCatalog, updated_at: new Date().toISOString() },
+      { key: 'vatRates', data: vatRates, updated_at: new Date().toISOString() },
     ], 'key');
   } catch (e) { console.error('[Supabase] Config sync:', e); }
 
