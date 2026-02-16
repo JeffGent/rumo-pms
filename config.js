@@ -349,6 +349,82 @@ let cashRegister = (() => {
 })();
 const saveCashRegister = () => localStorage.setItem('hotelCashRegister', JSON.stringify(cashRegister));
 
+// ── Channel Manager Data — persisted in localStorage ─────────────────────────
+
+// Rate overrides: key = "roomTypeId:ratePlanId:YYYY-MM-DD" → price
+let channelRateOverrides = (() => {
+  try {
+    const stored = localStorage.getItem('channelRateOverrides');
+    if (stored) return JSON.parse(stored);
+  } catch(e) {}
+  return {};
+})();
+const saveChannelRateOverrides = () => localStorage.setItem('channelRateOverrides', JSON.stringify(channelRateOverrides));
+
+// Restrictions: key = "roomTypeId:YYYY-MM-DD" → { minStay, maxStay, stopSell, cta, ctd }
+let channelRestrictions = (() => {
+  try {
+    const stored = localStorage.getItem('channelRestrictions');
+    if (stored) return JSON.parse(stored);
+  } catch(e) {}
+  return {};
+})();
+const saveChannelRestrictions = () => localStorage.setItem('channelRestrictions', JSON.stringify(channelRestrictions));
+
+// OTA channel connections
+let channelOTAConnections = (() => {
+  try {
+    const stored = localStorage.getItem('channelOTAConnections');
+    if (stored) return JSON.parse(stored);
+  } catch(e) {}
+  return [
+    { id: 'ch-1', name: 'Booking.com',   code: 'BDC', status: 'connected',    lastSync: new Date(Date.now() - 300000).toISOString(), commission: 15, rateModifier: 0,  channexChannelId: null, roomTypeMappings: {}, ratePlanMappings: {}, restrictionOverrides: {} },
+    { id: 'ch-2', name: 'Expedia',        code: 'EXP', status: 'connected',    lastSync: new Date(Date.now() - 600000).toISOString(), commission: 18, rateModifier: 5,  channexChannelId: null, roomTypeMappings: {}, ratePlanMappings: {}, restrictionOverrides: {} },
+    { id: 'ch-3', name: 'Airbnb',         code: 'ABB', status: 'disconnected', lastSync: null,                                         commission: 3,  rateModifier: 0,  channexChannelId: null, roomTypeMappings: {}, ratePlanMappings: {}, restrictionOverrides: {} },
+    { id: 'ch-4', name: 'Google Hotels',  code: 'GGL', status: 'connected',    lastSync: new Date(Date.now() - 120000).toISOString(), commission: 10, rateModifier: 0,  channexChannelId: null, roomTypeMappings: {}, ratePlanMappings: {}, restrictionOverrides: {} },
+    { id: 'ch-5', name: 'Agoda',          code: 'AGD', status: 'disconnected', lastSync: null,                                         commission: 20, rateModifier: 3,  channexChannelId: null, roomTypeMappings: {}, ratePlanMappings: {}, restrictionOverrides: {} },
+    { id: 'ch-6', name: 'HRS',            code: 'HRS', status: 'error',        lastSync: new Date(Date.now() - 86400000).toISOString(), commission: 12, rateModifier: 0,  channexChannelId: null, roomTypeMappings: {}, ratePlanMappings: {}, restrictionOverrides: {} },
+  ];
+})();
+const saveChannelOTAConnections = () => localStorage.setItem('channelOTAConnections', JSON.stringify(channelOTAConnections));
+
+// Channel Manager activity log
+let channelActivityLog = (() => {
+  try {
+    const stored = localStorage.getItem('channelActivityLog');
+    if (stored) return JSON.parse(stored);
+  } catch(e) {}
+  // Seed with some demo log entries
+  const now = Date.now();
+  return [
+    { id: 'log-1', timestamp: new Date(now - 300000).toISOString(),  type: 'sync',        channel: 'Booking.com',  message: 'Full sync completed', details: '24 room types, 3 rate plans pushed' },
+    { id: 'log-2', timestamp: new Date(now - 600000).toISOString(),  type: 'sync',        channel: 'Expedia',      message: 'Availability update sent', details: '14 days updated' },
+    { id: 'log-3', timestamp: new Date(now - 1200000).toISOString(), type: 'booking',     channel: 'Booking.com',  message: 'New reservation received', details: 'BDC-938271 — Standard Double, Feb 20-23' },
+    { id: 'log-4', timestamp: new Date(now - 3600000).toISOString(), type: 'rate_update', channel: 'All channels', message: 'Rate update pushed', details: 'Standard Triple: EUR 125 for Feb 20-28' },
+    { id: 'log-5', timestamp: new Date(now - 7200000).toISOString(), type: 'sync',        channel: 'Google Hotels', message: 'Full sync completed', details: '24 room types, 3 rate plans pushed' },
+    { id: 'log-6', timestamp: new Date(now - 86400000).toISOString(), type: 'error',      channel: 'HRS',          message: 'Sync failed — authentication error', details: 'API key expired or invalid. Re-authenticate in channel settings.' },
+    { id: 'log-7', timestamp: new Date(now - 90000000).toISOString(), type: 'restriction', channel: 'All channels', message: 'Stop sell activated', details: 'Deluxe Double: Feb 14-16 (Valentine\'s weekend sold out)' },
+    { id: 'log-8', timestamp: new Date(now - 172800000).toISOString(), type: 'booking',   channel: 'Expedia',      message: 'Reservation cancelled', details: 'EXP-472918 — Classic Twin, Feb 18-20' },
+  ];
+})();
+const saveChannelActivityLog = () => localStorage.setItem('channelActivityLog', JSON.stringify(channelActivityLog));
+
+// ── Smart Pricing — occupancy-based dynamic pricing ──────────────────────────
+let smartPricingConfig = (() => {
+  try {
+    const stored = localStorage.getItem('smartPricingConfig');
+    if (stored) return JSON.parse(stored);
+  } catch(e) {}
+  return {
+    enabled: false,
+    maxIncrease: 40,
+    maxDecrease: 20,
+    weekendSurcharge: 5,
+    rules: [] // populated per room type: { roomTypeId, enabled, tiers: [{ minOcc, maxOcc, adjustment }] }
+  };
+})();
+const saveSmartPricingConfig = () => localStorage.setItem('smartPricingConfig', JSON.stringify(smartPricingConfig));
+
 // Backward-compatibility aliases (companyRegistry / guestRegistry used elsewhere in codebase)
 const companyRegistry = companyProfiles;
 const saveCompanyRegistry = saveCompanyProfiles;

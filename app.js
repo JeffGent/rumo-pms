@@ -106,7 +106,7 @@ const ModernHotelPMS = () => {
   }, [calDatePickerOpen]);
 
   // Only tick the clock when NOT on reservation detail, profiles, or modals (avoids re-renders that kill state/dropdowns)
-  const clockPaused = selectedReservation || newReservationOpen || searchOpen || invoiceOpen || messagesOpen || calDatePickerOpen || activePage === 'profiles' || activePage === 'reports' || activePage === 'settings' || activePage === 'payments';
+  const clockPaused = selectedReservation || newReservationOpen || searchOpen || invoiceOpen || messagesOpen || calDatePickerOpen || activePage === 'profiles' || activePage === 'reports' || activePage === 'settings' || activePage === 'payments' || activePage === 'channelmanager';
   useEffect(() => {
     if (clockPaused) return;
     const timer = setInterval(() => setTime(new Date()), 1000);
@@ -723,6 +723,7 @@ const ModernHotelPMS = () => {
                 { id: 'calendar', label: 'Calendar', icon: Icons.Calendar },
                 { id: 'housekeeping', label: 'Housekeeping', icon: Icons.Sparkles },
                 { id: 'fb', label: 'F&B', icon: navTabs[3].icon },
+                { id: 'channelmanager', label: 'Channel Manager', icon: (p) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/><line x1="10.5" y1="7.5" x2="6.5" y2="16.5"/><line x1="13.5" y1="7.5" x2="17.5" y2="16.5"/></svg> },
                 { id: 'profiles', label: 'Profiles', icon: Icons.Users },
                 { id: 'payments', label: 'Payments', icon: Icons.CreditCard },
                 { id: 'reports', label: 'Reports', icon: (p) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...p}><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> },
@@ -799,6 +800,7 @@ const ModernHotelPMS = () => {
           {activePage === 'profiles' && <ProfilesView {...vp} />}
           {activePage === 'reports' && <ReportsView {...vp} />}
           {activePage === 'payments' && <PaymentsView {...vp} />}
+          {activePage === 'channelmanager' && <ChannelManagerView {...vp} />}
           {activePage === 'settings' && <SettingsView {...vp} />}
         </>
       )}

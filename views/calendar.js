@@ -334,7 +334,7 @@ const CalendarView = (props) => {
               <Icons.Calendar width="18" height="18" />
               <span>Reservations</span>
             </a>
-            <a className="cal-nav-link">
+            <a className={`cal-nav-link${activePage === 'channelmanager' ? ' active' : ''}`} onClick={() => { setActivePage('channelmanager'); setSelectedReservation(null); }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18"><circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/><line x1="10.5" y1="7.5" x2="6.5" y2="16.5"/><line x1="13.5" y1="7.5" x2="17.5" y2="16.5"/></svg>
               <span>Channel manager</span>
             </a>
@@ -381,22 +381,34 @@ const CalendarView = (props) => {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            {calViewMode === 'month' && (
-              <div className="flex items-center gap-2 pr-4 border-r border-neutral-200">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-neutral-400" style={{flexShrink:0}}>
-                  <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
-                </svg>
-                <input type="range" min="60" max="250" value={calColWidth} onChange={(e) => setCalColWidth(Number(e.target.value))}
-                  className="w-40 h-1 accent-neutral-800" title={`Column width: ${calColWidth}px`} />
-              </div>
-            )}
-            <div className="flex bg-neutral-100 rounded-lg p-0.5">
+            <div className="flex items-center gap-2 pr-4 border-r border-neutral-200" style={{
+              transition: 'max-width 280ms cubic-bezier(0.4, 0, 0.2, 1), opacity 200ms ease, transform 280ms cubic-bezier(0.4, 0, 0.2, 1)',
+              maxWidth: calViewMode === 'month' ? '220px' : '0px',
+              opacity: calViewMode === 'month' ? 1 : 0,
+              transform: calViewMode === 'month' ? 'translateX(0)' : 'translateX(12px)',
+              overflow: 'hidden',
+              borderColor: calViewMode === 'month' ? '' : 'transparent',
+            }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-neutral-400" style={{flexShrink:0}}>
+                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+              </svg>
+              <input type="range" min="60" max="250" value={calColWidth} onChange={(e) => setCalColWidth(Number(e.target.value))}
+                className="w-40 h-1 accent-neutral-800" title={`Column width: ${calColWidth}px`} />
+            </div>
+            <div className="relative flex bg-neutral-100 rounded-lg p-0.5" style={{minWidth: '106px'}}>
+              <div className="absolute top-0.5 bottom-0.5 bg-white rounded-md shadow-sm" style={{
+                width: 'calc(50% - 2px)',
+                left: calViewMode === 'week' ? '2px' : 'calc(50%)',
+                transition: 'left 250ms cubic-bezier(0.4, 0, 0.2, 1)',
+              }} />
               <button onClick={() => { setCalViewMode('week'); try { localStorage.setItem('calViewMode', 'week'); } catch(e) {} }}
-                className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all duration-200 ${calViewMode === 'week' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-700'}`}>
+                className="relative z-10 px-2.5 py-1 text-xs font-medium rounded-md transition-colors duration-200"
+                style={{ color: calViewMode === 'week' ? '#171717' : '#737373', flex: 1 }}>
                 Week
               </button>
               <button onClick={() => { setCalViewMode('month'); try { localStorage.setItem('calViewMode', 'month'); } catch(e) {} }}
-                className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all duration-200 ${calViewMode === 'month' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-700'}`}>
+                className="relative z-10 px-2.5 py-1 text-xs font-medium rounded-md transition-colors duration-200"
+                style={{ color: calViewMode === 'month' ? '#171717' : '#737373', flex: 1 }}>
                 Month
               </button>
             </div>
