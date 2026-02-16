@@ -314,7 +314,7 @@ const NewReservationModal = (props) => {
                 }
 
                 const newId = Math.max(...reservations.map(r => r.id), 0) + 1;
-                const bookingRef = 'RMO-' + String(newId).padStart(5, '0');
+                const bookingRef = getNextBookingRef();
 
                 const newRes = {
                   id: newId,
@@ -372,7 +372,7 @@ const NewReservationModal = (props) => {
                   // Create separate block per room
                   rooms.forEach((rm, idx) => {
                     const blockId = newId + idx;
-                    const blockRef = 'RMO-' + String(blockId).padStart(5, '0');
+                    const blockRef = getNextBookingRef();
                     reservations.push({
                       ...JSON.parse(JSON.stringify(newRes)),
                       id: blockId,

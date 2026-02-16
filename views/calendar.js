@@ -1,6 +1,6 @@
 // ── Calendar View ─────────────────────────────────────────────────────────────
 const CalendarView = (props) => {
-  const { selectedDate, setSelectedDate, calDatePickerOpen, setCalDatePickerOpen, calendarActiveFilter, setCalendarActiveFilter, calColWidth, setCalColWidth, sidebarCollapsed, setSidebarCollapsed, setActivePage, activePage, setSelectedReservation, setNewReservationOpen, setToastMessage, housekeepingStatus, setPreviousPage, toggleCheckInOut } = props;
+  const { selectedDate, setSelectedDate, calDatePickerOpen, setCalDatePickerOpen, calendarActiveFilter, setCalendarActiveFilter, calColWidth, setCalColWidth, calViewMode, setCalViewMode, sidebarCollapsed, setSidebarCollapsed, setActivePage, activePage, setSelectedReservation, setNewReservationOpen, setToastMessage, housekeepingStatus, setPreviousPage, toggleCheckInOut } = props;
 
     const dayNames = ['ZO', 'MA', 'DI', 'WO', 'DO', 'VR', 'ZA'];
     const todayDate = new Date();
@@ -21,8 +21,10 @@ const CalendarView = (props) => {
       return 'reserved'; // confirmed
     };
 
-    const calDaysCount = 30;
-    const calStart = addDays(selectedDate, -1); // col 1 = yesterday, col 2 = today
+    // Week view: 7 days starting Monday; Month view: 30 days starting yesterday
+    const getMonday = (d) => { const day = d.getDay(); const diff = (day === 0 ? -6 : 1) - day; return addDays(d, diff); };
+    const calDaysCount = calViewMode === 'week' ? 7 : 30;
+    const calStart = calViewMode === 'week' ? getMonday(selectedDate) : addDays(selectedDate, -1);
     const days = Array.from({length: calDaysCount}, (_, i) => addDays(calStart, i));
 
     const calGridWrapRef = React.useRef(null);
@@ -340,7 +342,7 @@ const CalendarView = (props) => {
               <Icons.Users width="18" height="18" />
               <span>Profiles</span>
             </a>
-            <a className="cal-nav-link">
+            <a className={`cal-nav-link${activePage === 'payments' ? ' active' : ''}`} onClick={() => { setActivePage('payments'); setSelectedReservation(null); }}>
               <Icons.CreditCard width="18" height="18" />
               <span>Payments</span>
             </a>
@@ -379,12 +381,24 @@ const CalendarView = (props) => {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 pr-4 border-r border-neutral-200">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-neutral-400" style={{flexShrink:0}}>
-                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
-              </svg>
-              <input type="range" min="60" max="250" value={calColWidth} onChange={(e) => setCalColWidth(Number(e.target.value))}
-                className="w-40 h-1 accent-neutral-800" title={`Column width: ${calColWidth}px`} />
+            {calViewMode === 'month' && (
+              <div className="flex items-center gap-2 pr-4 border-r border-neutral-200">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-neutral-400" style={{flexShrink:0}}>
+                  <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+                </svg>
+                <input type="range" min="60" max="250" value={calColWidth} onChange={(e) => setCalColWidth(Number(e.target.value))}
+                  className="w-40 h-1 accent-neutral-800" title={`Column width: ${calColWidth}px`} />
+              </div>
+            )}
+            <div className="flex bg-neutral-100 rounded-lg p-0.5">
+              <button onClick={() => { setCalViewMode('week'); try { localStorage.setItem('calViewMode', 'week'); } catch(e) {} }}
+                className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all duration-200 ${calViewMode === 'week' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-700'}`}>
+                Week
+              </button>
+              <button onClick={() => { setCalViewMode('month'); try { localStorage.setItem('calViewMode', 'month'); } catch(e) {} }}
+                className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all duration-200 ${calViewMode === 'month' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-700'}`}>
+                Month
+              </button>
             </div>
           <div className="cal-date-nav" style={{ marginBottom: 0, position: 'relative' }}>
             <button className="cal-nav-btn" onClick={() => setSelectedDate(addDays(selectedDate, -7))}>
@@ -392,7 +406,16 @@ const CalendarView = (props) => {
             </button>
             <button className="cal-date-display mini-picker-nav" onClick={() => setCalDatePickerOpen(!calDatePickerOpen)}
               style={{ padding: '4px 8px', borderRadius: '8px', color: '#111827', fontWeight: 500, fontSize: '0.875rem' }}>
-              {selectedDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+              {calViewMode === 'week'
+                ? (() => {
+                    const mon = getMonday(selectedDate);
+                    const sun = addDays(mon, 6);
+                    const sameMonth = mon.getMonth() === sun.getMonth();
+                    return sameMonth
+                      ? `${mon.getDate()} – ${sun.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
+                      : `${mon.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} – ${sun.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+                  })()
+                : selectedDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
             </button>
             {calDatePickerOpen && (() => {
               const pickerDate = new Date(selectedDate);
@@ -447,7 +470,7 @@ const CalendarView = (props) => {
         </div>
 
         <div className="cal-grid-wrap" ref={calGridWrapRef}>
-          <div className="cal-grid" style={{gridTemplateColumns: `170px repeat(${calDaysCount}, ${calColWidth}px)`, userSelect: 'none'}}>
+          <div className="cal-grid" style={{gridTemplateColumns: calViewMode === 'week' ? `170px repeat(${calDaysCount}, 1fr)` : `170px repeat(${calDaysCount}, ${calColWidth}px)`, userSelect: 'none'}}>
             <div className="cal-corner-cell"></div>
             {days.map((day, i) => {
               const isWeekend = day.getDay() === 0 || day.getDay() === 6;

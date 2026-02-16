@@ -34,6 +34,10 @@ const ModernHotelPMS = () => {
     return 155;
   });
   const [calDatePickerOpen, setCalDatePickerOpen] = useState(false);
+  const [calViewMode, setCalViewMode] = useState(() => {
+    try { const v = localStorage.getItem('calViewMode'); if (v === 'week' || v === 'month') return v; } catch(e) {}
+    return 'month';
+  });
   const [checkedInRooms, setCheckedInRooms] = useState({});
   const [housekeepingTab, setHousekeepingTab] = useState('checkin');
   const [fbTab, setFbTab] = useState('all');
@@ -54,9 +58,15 @@ const ModernHotelPMS = () => {
   const [editingReservation, setEditingReservation] = useState(null);
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [changeRoomTarget, setChangeRoomTarget] = useState(null); // { roomIndex }
+  const [billTransferMode, setBillTransferMode] = useState(null); // null | 'items' | 'payments'
+  const [billTransferSearch, setBillTransferSearch] = useState('');
+  const [billTransferTarget, setBillTransferTarget] = useState(null);
+  const [billTransferSelected, setBillTransferSelected] = useState([]);
   const [toastMessage, setToastMessage] = useState(null);
   const [warningToast, setWarningToast] = useState(null); // { message, resId }
   const [cloudStatus, setCloudStatus] = useState('idle'); // Supabase sync indicator
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [tourActive, setTourActive] = useState(null);
   const messageInputRef = React.useRef(null);
   const messagesEndRef = React.useRef(null);
   const searchInputRef = React.useRef(null);
@@ -96,7 +106,7 @@ const ModernHotelPMS = () => {
   }, [calDatePickerOpen]);
 
   // Only tick the clock when NOT on reservation detail, profiles, or modals (avoids re-renders that kill state/dropdowns)
-  const clockPaused = selectedReservation || newReservationOpen || searchOpen || invoiceOpen || messagesOpen || calDatePickerOpen || activePage === 'profiles' || activePage === 'reports' || activePage === 'settings';
+  const clockPaused = selectedReservation || newReservationOpen || searchOpen || invoiceOpen || messagesOpen || calDatePickerOpen || activePage === 'profiles' || activePage === 'reports' || activePage === 'settings' || activePage === 'payments';
   useEffect(() => {
     if (clockPaused) return;
     const timer = setInterval(() => setTime(new Date()), 1000);
@@ -255,6 +265,30 @@ const ModernHotelPMS = () => {
             });
             // Show billing warning if issues exist
             showCheckoutWarning(reservations[idx]);
+            // Auto-charge VCC on checkout
+            const res = reservations[idx];
+            const bp = bookerProfiles.find(b =>
+              (b.email && b.email === res.booker?.email) ||
+              (b.firstName === res.booker?.firstName && b.lastName === res.booker?.lastName)
+            );
+            if (bp?.creditCard?.isVCC) {
+              const roomTotal = (res.rooms || []).reduce((sum, rm) => rm.priceType === 'fixed' ? sum + (rm.fixedPrice || 0) : sum + (rm.nightPrices || []).reduce((s, n) => s + (n.amount || 0), 0), 0);
+              const extrasTotal = (res.extras || []).reduce((sum, ex) => sum + (ex.quantity || 0) * (ex.unitPrice || 0), 0);
+              const totalAmt = roomTotal + extrasTotal;
+              const paidAmt = (res.payments || []).filter(p => p.status === 'completed').reduce((s, p) => s + p.amount, 0);
+              const outstanding = Math.max(0, totalAmt - paidAmt);
+              if (outstanding > 0) {
+                const maxPid = (res.payments || []).reduce((m, p) => Math.max(m, p.id || 0), 0);
+                reservations[idx].payments = [...(res.payments || []), {
+                  id: maxPid + 1, date: new Date().toISOString().split('T')[0],
+                  amount: Math.round(outstanding * 100) / 100,
+                  method: `VCC (\u2022\u2022\u2022\u2022 ${bp.creditCard.last4})`,
+                  note: 'Auto-charged VCC on checkout', status: 'completed', linkedInvoice: null,
+                }];
+                setToastMessage(`VCC charged: EUR ${outstanding.toFixed(2)}`);
+                saveReservationSingle(reservations[idx]);
+              }
+            }
           }
         } else {
           reservations[idx].isCheckedIn = !!newValue;
@@ -552,9 +586,11 @@ const ModernHotelPMS = () => {
     billSelected, setBillSelected, billSplitMode, setBillSplitMode,
     billPaySelected, setBillPaySelected, billRecipientOverride, setBillRecipientOverride,
     billCustomLabels, setBillCustomLabels, amendingInvoice, setAmendingInvoice,
+    billTransferMode, setBillTransferMode, billTransferSearch, setBillTransferSearch,
+    billTransferTarget, setBillTransferTarget, billTransferSelected, setBillTransferSelected,
     amendRecipient, setAmendRecipient, sidebarCollapsed, setSidebarCollapsed,
     activeFilter, setActiveFilter, calendarActiveFilter, setCalendarActiveFilter,
-    calColWidth, setCalColWidth, calDatePickerOpen, setCalDatePickerOpen,
+    calColWidth, setCalColWidth, calDatePickerOpen, setCalDatePickerOpen, calViewMode, setCalViewMode,
     checkedInRooms, housekeepingTab, setHousekeepingTab, fbTab, setFbTab,
     roomGridMode, setRoomGridMode, activeGuestTab, setActiveGuestTab,
     guestSearchActive, setGuestSearchActive, expandedRooms, setExpandedRooms,
@@ -579,6 +615,10 @@ const ModernHotelPMS = () => {
           <div className="flex items-center justify-between">
             {/* Logo & Navigation Tabs */}
             <div className="flex items-center gap-4 md:gap-8">
+              {/* Mobile hamburger */}
+              <button onClick={() => setMobileMenuOpen(true)} className="md:hidden p-2 -ml-2 hover:bg-neutral-100 rounded-xl transition-colors">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+              </button>
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-neutral-900 rounded-2xl flex items-center justify-center">
                   <Icons.Home className="w-5 h-5 text-white" />
@@ -617,7 +657,7 @@ const ModernHotelPMS = () => {
             {/* Right Side - Stats & Actions */}
             <div className="flex items-center gap-3 md:gap-6">
               {/* New Reservation Button */}
-              <button onClick={() => setNewReservationOpen(true)}
+              <button data-tour="new-res-btn" onClick={() => setNewReservationOpen(true)}
                 className="hidden md:flex items-center gap-2 px-4 py-2 bg-neutral-900 text-white rounded-xl font-medium hover:bg-neutral-800 transition-colors duration-200 shadow-lg">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M5 12h14"/>
@@ -627,11 +667,18 @@ const ModernHotelPMS = () => {
               </button>
 
               {/* Search button (opens Ctrl+K modal) */}
-              <button onClick={() => { setSearchOpen(true); setSearchQuery(''); }}
+              <button data-tour="search-btn" onClick={() => { setSearchOpen(true); setSearchQuery(''); }}
                 className="flex items-center gap-3 pl-3 pr-3 py-2 w-auto flex-1 md:w-56 md:flex-none bg-neutral-100 rounded-xl text-sm text-neutral-400 hover:bg-neutral-200 transition-all duration-200 cursor-pointer">
                 <Icons.Search className="w-4 h-4 flex-shrink-0" />
                 <span className="hidden md:inline flex-1 text-left">Search...</span>
                 <kbd className="hidden md:inline px-1.5 py-0.5 bg-white rounded-md text-[11px] font-medium text-neutral-400 border border-neutral-200">Ctrl+K</kbd>
+              </button>
+
+              {/* Tour help button */}
+              <button onClick={() => setTourActive(activePage)} className="p-2 hover:bg-neutral-100 rounded-xl transition-colors duration-200" title="Start guided tour">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 text-neutral-600">
+                  <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
               </button>
 
               {/* Messages */}
@@ -653,6 +700,50 @@ const ModernHotelPMS = () => {
           </div>
         </div>
       </nav>
+
+      {/* Mobile Slide-out Menu */}
+      {mobileMenuOpen && (
+        <div className="md:hidden fixed inset-0 z-[60]">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setMobileMenuOpen(false)} />
+          <div className="absolute left-0 top-0 bottom-0 w-72 bg-white shadow-2xl flex flex-col animate-slideIn">
+            <div className="flex items-center justify-between p-5 border-b border-neutral-100">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 bg-neutral-900 rounded-xl flex items-center justify-center">
+                  <Icons.Home className="w-4 h-4 text-white" />
+                </div>
+                <span className="text-sm font-semibold text-neutral-900">Rumo</span>
+              </div>
+              <button onClick={() => setMobileMenuOpen(false)} className="p-2 hover:bg-neutral-100 rounded-xl transition-colors">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+            <nav className="flex-1 overflow-y-auto py-3 px-3">
+              {[
+                { id: 'dashboard', label: 'Reservations', icon: Icons.Calendar },
+                { id: 'calendar', label: 'Calendar', icon: Icons.Calendar },
+                { id: 'housekeeping', label: 'Housekeeping', icon: Icons.Sparkles },
+                { id: 'fb', label: 'F&B', icon: navTabs[3].icon },
+                { id: 'profiles', label: 'Profiles', icon: Icons.Users },
+                { id: 'payments', label: 'Payments', icon: Icons.CreditCard },
+                { id: 'reports', label: 'Reports', icon: (p) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...p}><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> },
+                { id: 'settings', label: 'Settings', icon: (p) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...p}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> },
+              ].map(tab => {
+                const IconComp = tab.icon;
+                return (
+                  <button key={tab.id} onClick={() => { setActivePage(tab.id); setSelectedReservation(null); setMobileMenuOpen(false); }}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all mb-0.5 ${
+                      activePage === tab.id ? 'bg-neutral-100 text-neutral-900 font-semibold' : 'text-neutral-500 hover:bg-neutral-50 hover:text-neutral-900'
+                    }`}>
+                    <IconComp className="w-[18px] h-[18px] flex-shrink-0" width="18" height="18" />
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </nav>
+            <div className="p-4 border-t border-neutral-100 text-xs text-neutral-400">Rumo &copy; All Rights Reserved</div>
+          </div>
+        </div>
+      )}
 
       {/* Mobile Bottom Navigation */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-neutral-200 z-50 px-2 pb-[env(safe-area-inset-bottom)]">
@@ -707,6 +798,7 @@ const ModernHotelPMS = () => {
           {activePage === 'fb' && <FBView {...vp} />}
           {activePage === 'profiles' && <ProfilesView {...vp} />}
           {activePage === 'reports' && <ReportsView {...vp} />}
+          {activePage === 'payments' && <PaymentsView {...vp} />}
           {activePage === 'settings' && <SettingsView {...vp} />}
         </>
       )}
@@ -809,6 +901,9 @@ const ModernHotelPMS = () => {
           {toastMessage}
         </div>
       )}
+
+      {/* Spotlight Tour */}
+      {tourActive && <SpotlightTour tourId={tourActive} onComplete={() => setTourActive(null)} />}
     </div>
   );
 };

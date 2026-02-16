@@ -219,7 +219,7 @@ const DashboardView = (props) => {
 
   return (
   <div className={`cal-layout${sidebarCollapsed ? ' collapsed' : ''}`}>
-    <aside className={`cal-sidebar${sidebarCollapsed ? ' collapsed' : ''}`}>
+    <aside data-tour="sidebar" className={`cal-sidebar${sidebarCollapsed ? ' collapsed' : ''}`}>
       <button onClick={() => setSidebarCollapsed(!sidebarCollapsed)} className="sidebar-toggle" title={sidebarCollapsed ? 'Expand' : 'Collapse'}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
       </button>
@@ -227,7 +227,7 @@ const DashboardView = (props) => {
         <a className="cal-nav-link active"><Icons.Calendar width="18" height="18" /><span>Reservations</span></a>
         <a className="cal-nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18"><circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/><line x1="10.5" y1="7.5" x2="6.5" y2="16.5"/><line x1="13.5" y1="7.5" x2="17.5" y2="16.5"/></svg><span>Channel manager</span></a>
         <a className={`cal-nav-link${activePage === 'profiles' ? ' active' : ''}`} onClick={() => { setActivePage('profiles'); setSelectedReservation(null); }}><Icons.Users width="18" height="18" /><span>Profiles</span></a>
-        <a className="cal-nav-link"><Icons.CreditCard width="18" height="18" /><span>Payments</span></a>
+        <a className={`cal-nav-link${activePage === 'payments' ? ' active' : ''}`} onClick={() => { setActivePage('payments'); setSelectedReservation(null); }}><Icons.CreditCard width="18" height="18" /><span>Payments</span></a>
         <a className={`cal-nav-link${activePage === 'reports' ? ' active' : ''}`} onClick={() => { setActivePage('reports'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span>Reports</span></a>
         <a className={`cal-nav-link${activePage === 'settings' ? ' active' : ''}`} onClick={() => { setActivePage('settings'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>Settings</span></a>
       </nav>
@@ -237,7 +237,7 @@ const DashboardView = (props) => {
     <div className="max-w-7xl mx-auto">
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6 md:mb-8">
         <div className="cal-title"><h2>Operations Overview</h2><p>Real-time hotel status and reservations</p></div>
-        <div className="flex items-center gap-2 md:gap-4">
+        <div data-tour="date-nav" className="flex items-center gap-2 md:gap-4">
           <button onClick={() => setSelectedDate(addDays(selectedDate, -1))} className="p-2 hover:bg-neutral-100 rounded-xl transition-colors"><Icons.ChevronLeft className="w-5 h-5 text-neutral-600" /></button>
           <div className="px-3 py-1.5 md:px-6 md:py-2 bg-neutral-100 rounded-xl"><span className="text-sm md:text-lg font-medium text-neutral-900">{selectedDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span></div>
           <button onClick={() => setSelectedDate(addDays(selectedDate, 1))} className="p-2 hover:bg-neutral-100 rounded-xl transition-colors"><Icons.ChevronRight className="w-5 h-5 text-neutral-600" /></button>
@@ -246,7 +246,7 @@ const DashboardView = (props) => {
       </div>
 
       {/* Revenue Banner */}
-      <div className="mb-6 md:mb-8 bg-gradient-to-br from-neutral-900 via-neutral-800 to-neutral-900 rounded-2xl md:rounded-3xl p-5 md:p-8 text-white shadow-2xl shadow-neutral-900/20 relative overflow-hidden">
+      <div data-tour="revenue-banner" className="mb-6 md:mb-8 bg-gradient-to-br from-neutral-900 via-neutral-800 to-neutral-900 rounded-2xl md:rounded-3xl p-5 md:p-8 text-white shadow-2xl shadow-neutral-900/20 relative overflow-hidden">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-4 md:gap-0">
           <div className="flex flex-col md:flex-row md:items-center gap-4 md:gap-12">
             <div>
@@ -269,7 +269,7 @@ const DashboardView = (props) => {
       {/* Room Grid */}
       <div className="mb-4 md:mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <h2 className="font-light text-neutral-900 font-serif text-xl">Room Status</h2>
-        <div className="flex flex-wrap gap-2 md:gap-4">
+        <div data-tour="room-filters" className="flex flex-wrap gap-2 md:gap-4">
           {[
             { id: 'all', label: 'All Rooms' },
             { id: 'available', label: 'Available' },
@@ -288,7 +288,7 @@ const DashboardView = (props) => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
+      <div data-tour="room-grid" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
         {filteredRooms.map(reservation => (
           <RoomCard key={reservation.id} reservation={reservation} />
         ))}

@@ -55,16 +55,23 @@ const restUpsert = async (table, rows, onConflict) => {
 const syncAllReservations = async (resList) => {
   setSyncStatus('syncing');
   try {
-    const rawRows = resList.map(res => ({
-      booking_ref: res.bookingRef,
-      checkin: res.checkin instanceof Date ? res.checkin.toISOString().slice(0, 10) : (res.checkin || '').slice(0, 10),
-      checkout: res.checkout instanceof Date ? res.checkout.toISOString().slice(0, 10) : (res.checkout || '').slice(0, 10),
-      status: res.reservationStatus || 'confirmed',
-      guest_name: res.guest || `${res.booker?.firstName || ''} ${res.booker?.lastName || ''}`.trim(),
-      data: res,
-    }));
+    const rawRows = resList
+      .filter(res => res.bookingRef && typeof res.bookingRef === 'string' && res.bookingRef.trim() !== '')
+      .map(res => ({
+        booking_ref: res.bookingRef,
+        checkin: res.checkin instanceof Date ? res.checkin.toISOString().slice(0, 10) : (res.checkin || '').slice(0, 10),
+        checkout: res.checkout instanceof Date ? res.checkout.toISOString().slice(0, 10) : (res.checkout || '').slice(0, 10),
+        status: res.reservationStatus || 'confirmed',
+        guest_name: res.guest || `${res.booker?.firstName || ''} ${res.booker?.lastName || ''}`.trim(),
+        data: res,
+      }));
     // Deduplicate by booking_ref (last wins) — prevents PG "cannot affect row a second time" error
-    const rows = [...new Map(rawRows.map(r => [r.booking_ref, r])).values()];
+    const dedupMap = new Map();
+    rawRows.forEach(r => {
+      if (dedupMap.has(r.booking_ref)) console.warn(`[Supabase] Duplicate booking_ref skipped: ${r.booking_ref}`);
+      dedupMap.set(r.booking_ref, r);
+    });
+    const rows = [...dedupMap.values()];
 
     // Upsert in batches of 50 (PostgREST limit safe)
     for (let i = 0; i < rows.length; i += 50) {
@@ -144,6 +151,72 @@ const saveReservationSingle = (res) => {
   syncReservation(res);
 };
 
+// ── Pull from Supabase (fresh instance) ─────────────────────────────────────
+const pullFromSupabase = async () => {
+  if (localStorage.getItem('supabaseSeeded')) return false;
+
+  console.log('[Supabase] Fresh instance detected — pulling data from cloud...');
+  setSyncStatus('syncing');
+
+  try {
+    // 1. Pull config
+    const configs = await restGet('config', 'select=key,data');
+    if (configs.length === 0) {
+      console.log('[Supabase] No config in cloud, using defaults');
+      localStorage.setItem('supabaseSeeded', String(Date.now()));
+      setSyncStatus('idle');
+      return false;
+    }
+
+    const cfgMap = {};
+    configs.forEach(c => { cfgMap[c.key] = c.data; });
+
+    if (cfgMap.hotelSettings) { Object.assign(hotelSettings, cfgMap.hotelSettings); saveHotelSettings(); }
+    if (cfgMap.roomTypes && Array.isArray(cfgMap.roomTypes)) { roomTypes.length = 0; roomTypes.push(...cfgMap.roomTypes); saveRoomTypes(); }
+    if (cfgMap.ratePlans && Array.isArray(cfgMap.ratePlans)) { ratePlans.length = 0; ratePlans.push(...cfgMap.ratePlans); saveRatePlans(); }
+    if (cfgMap.cancellationPolicies && Array.isArray(cfgMap.cancellationPolicies)) { cancellationPolicies.length = 0; cancellationPolicies.push(...cfgMap.cancellationPolicies); saveCancellationPolicies(); }
+    if (cfgMap.extrasCatalog && Array.isArray(cfgMap.extrasCatalog)) { extrasCatalog.length = 0; extrasCatalog.push(...cfgMap.extrasCatalog); saveExtrasCatalog(); }
+    if (cfgMap.vatRates && Array.isArray(cfgMap.vatRates)) { vatRates.length = 0; vatRates.push(...cfgMap.vatRates); saveVatRates(); }
+    console.log('[Supabase] Config pulled:', Object.keys(cfgMap).join(', '));
+
+    // 2. Pull reservations
+    const resRows = await restGet('reservations', 'select=data&order=booking_ref');
+    if (resRows.length > 0) {
+      const pulled = resRows.map(r => r.data);
+      try {
+        localStorage.setItem('hotelReservations', JSON.stringify(pulled));
+        localStorage.setItem('hotelDataVersion', typeof DATA_VERSION !== 'undefined' ? String(DATA_VERSION) : '27');
+      } catch (e) {}
+      console.log(`[Supabase] Pulled ${resRows.length} reservations`);
+    }
+
+    // 3. Pull profiles
+    const pullProf = async (table, lsKey) => {
+      try {
+        const rows = await restGet(table, 'select=data');
+        if (rows.length > 0) {
+          localStorage.setItem(lsKey, JSON.stringify(rows.map(r => r.data)));
+          console.log(`[Supabase] Pulled ${rows.length} ${table}`);
+        }
+      } catch (e) { console.warn(`[Supabase] Pull ${table}:`, e.message); }
+    };
+    await pullProf('company_profiles', 'hotelCompanyProfiles');
+    await pullProf('guest_profiles', 'hotelGuestProfiles');
+    await pullProf('booker_profiles', 'hotelBookerProfiles');
+
+    // Mark as seeded, reload to re-initialize everything from pulled localStorage
+    localStorage.setItem('supabaseSeeded', String(Date.now()));
+    console.log('[Supabase] Pull complete — reloading...');
+    window.location.reload();
+    return true;
+  } catch (e) {
+    console.error('[Supabase] Pull failed:', e);
+    localStorage.setItem('supabaseSeeded', String(Date.now()));
+    setSyncStatus('error');
+    return false;
+  }
+};
+
 // ── Initial sync on page load ───────────────────────────────────────────────
 const initialSync = async () => {
   // Check connectivity with a direct fetch
@@ -158,6 +231,10 @@ const initialSync = async () => {
     setSyncStatus('offline');
     return;
   }
+
+  // On a fresh instance (no supabaseSeeded flag), pull from cloud first
+  const didPull = await pullFromSupabase();
+  if (didPull) return; // page is reloading
 
   // Push current localStorage data to Supabase (direct, no debounce)
   console.log('[Supabase] Starting initial sync...');
@@ -179,7 +256,6 @@ const initialSync = async () => {
     if (rows.length === 0) { console.log(`[Supabase] ${table}: skipped (0 rows)`); return; }
     console.log(`[Supabase] ${table}: upserting ${rows.length} rows...`);
     await restUpsert(table, rows, 'id');
-    // Verify write succeeded by reading back
     const verify = await restGet(table, 'select=id&limit=1');
     console.log(`[Supabase] ${table}: upsert done, verify read=${verify.length} rows ${verify.length === 0 ? '⚠️ RLS BLOCKING? Check Supabase → Authentication → Policies' : '✓'}`);
   };
@@ -188,4 +264,11 @@ const initialSync = async () => {
   try { await profSync('guest_profiles', guestProfiles); } catch (e) { console.error('[Supabase] guest_profiles FAILED:', e.message); }
   try { await profSync('booker_profiles', bookerProfiles); } catch (e) { console.error('[Supabase] booker_profiles FAILED:', e.message); }
   console.log('[Supabase] Initial sync complete');
+};
+
+// ── Force pull (console helper) ────────────────────────────────────────────
+window.forcePull = () => {
+  localStorage.removeItem('supabaseSeeded');
+  console.log('[Supabase] supabaseSeeded removed — reloading to trigger pull...');
+  location.reload();
 };

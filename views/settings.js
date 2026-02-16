@@ -127,7 +127,7 @@ const SettingsView = (props) => {
         <a className="cal-nav-link" onClick={() => { setActivePage('dashboard'); setSelectedReservation(null); }}><Icons.Calendar width="18" height="18" /><span>Reservations</span></a>
         <a className="cal-nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18"><circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/><line x1="10.5" y1="7.5" x2="6.5" y2="16.5"/><line x1="13.5" y1="7.5" x2="17.5" y2="16.5"/></svg><span>Channel manager</span></a>
         <a className={`cal-nav-link${activePage === 'profiles' ? ' active' : ''}`} onClick={() => { setActivePage('profiles'); setSelectedReservation(null); }}><Icons.Users width="18" height="18" /><span>Profiles</span></a>
-        <a className="cal-nav-link"><Icons.CreditCard width="18" height="18" /><span>Payments</span></a>
+        <a className={`cal-nav-link${activePage === 'payments' ? ' active' : ''}`} onClick={() => { setActivePage('payments'); setSelectedReservation(null); }}><Icons.CreditCard width="18" height="18" /><span>Payments</span></a>
         <a className={`cal-nav-link${activePage === 'reports' ? ' active' : ''}`} onClick={() => { setActivePage('reports'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span>Reports</span></a>
         <a className="cal-nav-link active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>Settings</span></a>
       </nav>
@@ -190,66 +190,285 @@ const SettingsView = (props) => {
 
         {/* VAT Rates */}
         <div className="bg-white border border-neutral-200 rounded-2xl p-6 mt-4">
-          <h3 className="text-sm font-semibold text-neutral-900 mb-4">VAT Rates</h3>
-          <div className="space-y-3">
-            {localVatRates.map((vr, vi) => (
-              <div key={vr.id} className="flex flex-wrap items-start gap-3 p-3 bg-neutral-50 rounded-xl">
-                <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <div className="w-20">
-                    <label className={labelClass}>Rate (%)</label>
-                    <input type="number" min="0" max="100" value={vr.rate} onChange={e => {
-                      setLocalVatRates(prev => { const next = [...prev]; next[vi] = { ...next[vi], rate: Number(e.target.value) || 0 }; return next; });
-                      setDirty(true);
-                    }} className={inputClass} />
-                  </div>
-                  <div className="flex-1 min-w-[120px]">
-                    <label className={labelClass}>Label</label>
-                    <input value={vr.label} onChange={e => {
-                      setLocalVatRates(prev => { const next = [...prev]; next[vi] = { ...next[vi], label: e.target.value }; return next; });
-                      setDirty(true);
-                    }} className={inputClass} />
-                  </div>
-                  <button onClick={() => { setLocalVatRates(prev => prev.filter((_, idx) => idx !== vi)); setDirty(true); }}
-                    className="text-xs text-neutral-400 hover:text-red-500 transition-colors mt-5">Remove</button>
-                </div>
-                {/* Schedule: future rate changes */}
-                {(vr.schedule && vr.schedule.length > 0) && (
-                  <div className="w-full pl-1">
-                    <div className="text-[11px] font-medium text-neutral-500 mb-1">Scheduled changes</div>
-                    {vr.schedule.map((s, si) => (
-                      <div key={si} className="flex items-center gap-2 mb-1">
-                        <input type="date" value={s.from || ''} onChange={e => {
-                          setLocalVatRates(prev => { const next = JSON.parse(JSON.stringify(prev)); next[vi].schedule[si].from = e.target.value; return next; });
+          <h3 className="text-sm font-semibold text-neutral-900 mb-3">VAT Rates</h3>
+          <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 4px' }}>
+            <thead><tr>
+              <th className="text-[11px] font-medium text-neutral-400 text-left pl-3 pb-1" style={{ width: 70 }}>Rate</th>
+              <th className="text-[11px] font-medium text-neutral-400 text-left pl-2 pb-1">Label</th>
+              <th style={{ width: 100 }} />
+              <th style={{ width: 24 }} />
+            </tr></thead>
+            <tbody>
+              {localVatRates.map((vr, vi) => (
+                <React.Fragment key={vr.id}>
+                  <tr className="group">
+                    <td className="bg-neutral-50 rounded-l-lg pl-3 py-1.5">
+                      <div className="flex items-center gap-1">
+                        <input type="number" min="0" max="100" value={vr.rate} onChange={e => {
+                          setLocalVatRates(prev => { const next = [...prev]; next[vi] = { ...next[vi], rate: Number(e.target.value) || 0 }; return next; });
                           setDirty(true);
-                        }} className="px-2 py-0.5 border border-neutral-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-neutral-400" />
-                        <span className="text-xs text-neutral-400">&rarr;</span>
-                        <input type="number" min="0" max="100" value={s.newRate} onChange={e => {
-                          setLocalVatRates(prev => { const next = JSON.parse(JSON.stringify(prev)); next[vi].schedule[si].newRate = Number(e.target.value) || 0; return next; });
-                          setDirty(true);
-                        }} className="w-16 px-2 py-0.5 border border-neutral-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-neutral-400" />
+                        }} className="w-14 px-2 py-1 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-neutral-400 bg-white" />
                         <span className="text-xs text-neutral-400">%</span>
-                        <button onClick={() => {
-                          setLocalVatRates(prev => { const next = JSON.parse(JSON.stringify(prev)); next[vi].schedule.splice(si, 1); return next; });
-                          setDirty(true);
-                        }} className="text-neutral-300 hover:text-red-500 text-xs">×</button>
                       </div>
-                    ))}
-                  </div>
-                )}
-                <button onClick={() => {
-                  setLocalVatRates(prev => { const next = JSON.parse(JSON.stringify(prev)); next[vi].schedule = [...(next[vi].schedule || []), { from: '', newRate: vr.rate }]; return next; });
-                  setDirty(true);
-                }} className="text-[11px] text-neutral-400 hover:text-neutral-600 transition-colors mt-5">+ Schedule change</button>
-              </div>
-            ))}
-          </div>
+                    </td>
+                    <td className="bg-neutral-50 py-1.5 pl-2">
+                      <input value={vr.label} onChange={e => {
+                        setLocalVatRates(prev => { const next = [...prev]; next[vi] = { ...next[vi], label: e.target.value }; return next; });
+                        setDirty(true);
+                      }} className="w-full px-2 py-1 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-neutral-400 bg-white" />
+                    </td>
+                    <td className="bg-neutral-50 py-1.5 text-right pr-1">
+                      <button onClick={() => {
+                        setLocalVatRates(prev => { const next = JSON.parse(JSON.stringify(prev)); next[vi].schedule = [...(next[vi].schedule || []), { from: '', newRate: vr.rate }]; return next; });
+                        setDirty(true);
+                      }} className="text-[11px] text-neutral-300 hover:text-neutral-500 transition-colors opacity-0 group-hover:opacity-100">+ Schedule</button>
+                    </td>
+                    <td className="bg-neutral-50 rounded-r-lg py-1.5 pr-2 text-center">
+                      <button onClick={() => { setLocalVatRates(prev => prev.filter((_, idx) => idx !== vi)); setDirty(true); }}
+                        className="text-neutral-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                      </button>
+                    </td>
+                  </tr>
+                  {(vr.schedule && vr.schedule.length > 0) && vr.schedule.map((s, si) => (
+                    <tr key={`${vr.id}-s${si}`}>
+                      <td colSpan="4" className="pl-6 pb-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] text-neutral-400">from</span>
+                          <input type="date" value={s.from || ''} onChange={e => {
+                            setLocalVatRates(prev => { const next = JSON.parse(JSON.stringify(prev)); next[vi].schedule[si].from = e.target.value; return next; });
+                            setDirty(true);
+                          }} className="px-2 py-0.5 border border-neutral-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-neutral-400" />
+                          <span className="text-[11px] text-neutral-400">&rarr;</span>
+                          <input type="number" min="0" max="100" value={s.newRate} onChange={e => {
+                            setLocalVatRates(prev => { const next = JSON.parse(JSON.stringify(prev)); next[vi].schedule[si].newRate = Number(e.target.value) || 0; return next; });
+                            setDirty(true);
+                          }} className="w-14 px-2 py-0.5 border border-neutral-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-neutral-400" />
+                          <span className="text-[11px] text-neutral-400">%</span>
+                          <button onClick={() => {
+                            setLocalVatRates(prev => { const next = JSON.parse(JSON.stringify(prev)); next[vi].schedule.splice(si, 1); return next; });
+                            setDirty(true);
+                          }} className="text-neutral-300 hover:text-red-500 text-xs ml-1">×</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
           <button onClick={() => {
             const newId = 'vat-' + Date.now();
             setLocalVatRates(prev => [...prev, { id: newId, rate: 0, label: '', schedule: [] }]);
             setDirty(true);
-          }} className="w-full py-2.5 mt-3 border-2 border-dashed border-neutral-200 rounded-xl text-sm font-medium text-neutral-400 hover:text-neutral-600 hover:border-neutral-300 transition-colors">
-            + Add VAT Rate
-          </button>
+          }} className="text-xs text-neutral-400 hover:text-neutral-600 transition-colors mt-2">+ Add rate</button>
+        </div>
+
+        {/* Invoice Numbering */}
+        <div className="bg-white border border-neutral-200 rounded-2xl p-6 mt-4">
+          <h3 className="text-sm font-semibold text-neutral-900 mb-1">Invoice Numbering</h3>
+          <p className="text-xs text-neutral-400 mb-4">Sequential numbering for invoices, credit notes and proformas. Belgian law requires ascending numbers without gaps.</p>
+          {(() => {
+            const inv = localSettings.invoiceNumbering || {};
+            const updateInv = (key, value) => {
+              setLocalSettings(prev => ({ ...prev, invoiceNumbering: { ...prev.invoiceNumbering, [key]: value } }));
+              setDirty(true);
+            };
+            const sep = inv.separator || '-';
+            const yr = new Date().getFullYear();
+            const pad = String(inv.nextNumber || 1).padStart(inv.digits || 4, '0');
+            const preview = [inv.prefix || 'INV', ...(inv.includeYear ? [yr] : []), pad].join(sep);
+            const previewCN = [inv.creditPrefix || 'CN', ...(inv.includeYear ? [yr] : []), pad].join(sep);
+            return (
+              <div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                  <div>
+                    <label className={labelClass}>Invoice prefix</label>
+                    <input value={inv.prefix || ''} onChange={e => updateInv('prefix', e.target.value)} className={inputClass} placeholder="INV" />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Credit note prefix</label>
+                    <input value={inv.creditPrefix || ''} onChange={e => updateInv('creditPrefix', e.target.value)} className={inputClass} placeholder="CN" />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Proforma prefix</label>
+                    <input value={inv.proformaPrefix || ''} onChange={e => updateInv('proformaPrefix', e.target.value)} className={inputClass} placeholder="PRO" />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Separator</label>
+                    <select value={inv.separator || '-'} onChange={e => updateInv('separator', e.target.value)} className={inputClass}>
+                      <option value="-">Dash (-)</option>
+                      <option value="/">Slash (/)</option>
+                      <option value=".">Dot (.)</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                  <div>
+                    <label className={labelClass}>Next number</label>
+                    <input type="number" min="1" value={inv.nextNumber || 1} onChange={e => updateInv('nextNumber', Math.max(1, Number(e.target.value) || 1))} className={inputClass} />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Digits (zero-pad)</label>
+                    <select value={inv.digits || 4} onChange={e => updateInv('digits', Number(e.target.value))} className={inputClass}>
+                      <option value={3}>3 (001)</option>
+                      <option value={4}>4 (0001)</option>
+                      <option value={5}>5 (00001)</option>
+                      <option value={6}>6 (000001)</option>
+                    </select>
+                  </div>
+                  <div className="flex items-end gap-3 pb-0.5">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={inv.includeYear !== false} onChange={e => updateInv('includeYear', e.target.checked)}
+                        className="w-4 h-4 rounded border-neutral-300 text-neutral-900 focus:ring-neutral-500" />
+                      <span className="text-sm text-neutral-700">Include year</span>
+                    </label>
+                  </div>
+                  <div className="flex items-end gap-3 pb-0.5">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={inv.resetYearly !== false} onChange={e => updateInv('resetYearly', e.target.checked)}
+                        className="w-4 h-4 rounded border-neutral-300 text-neutral-900 focus:ring-neutral-500" />
+                      <span className="text-sm text-neutral-700">Reset yearly</span>
+                    </label>
+                  </div>
+                </div>
+                <div className="bg-neutral-50 rounded-xl px-4 py-3 flex items-center gap-6">
+                  <span className="text-xs text-neutral-400">Preview:</span>
+                  <span className="text-sm font-mono font-medium text-neutral-900">{preview}</span>
+                  <span className="text-xs text-neutral-300">|</span>
+                  <span className="text-sm font-mono font-medium text-neutral-900">{previewCN}</span>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+        {/* Booking Reference Numbering */}
+        <div className="bg-white border border-neutral-200 rounded-2xl p-6 mt-4">
+          <h3 className="text-sm font-semibold text-neutral-900 mb-1">Booking Reference</h3>
+          <p className="text-xs text-neutral-400 mb-4">Customise the format of internal reservation reference numbers (e.g. RMO-00001).</p>
+          {(() => {
+            const br = localSettings.bookingRefNumbering || {};
+            const updateBR = (key, value) => {
+              setLocalSettings(prev => ({ ...prev, bookingRefNumbering: { ...prev.bookingRefNumbering, [key]: value } }));
+              setDirty(true);
+            };
+            const sep = br.separator || '-';
+            const yr = new Date().getFullYear();
+            const pad = String(br.nextNumber || 1).padStart(br.digits || 5, '0');
+            const preview = [br.prefix || 'RMO', ...(br.includeYear ? [yr] : []), pad].join(sep);
+            return (
+              <div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                  <div>
+                    <label className={labelClass}>Prefix</label>
+                    <input value={br.prefix || ''} onChange={e => updateBR('prefix', e.target.value)} className={inputClass} placeholder="RMO" />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Separator</label>
+                    <select value={br.separator || '-'} onChange={e => updateBR('separator', e.target.value)} className={inputClass}>
+                      <option value="-">Dash (-)</option>
+                      <option value="/">Slash (/)</option>
+                      <option value=".">Dot (.)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelClass}>Next number</label>
+                    <input type="number" min="1" value={br.nextNumber || 1} onChange={e => updateBR('nextNumber', Math.max(1, Number(e.target.value) || 1))} className={inputClass} />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Digits (zero-pad)</label>
+                    <select value={br.digits || 5} onChange={e => updateBR('digits', Number(e.target.value))} className={inputClass}>
+                      <option value={3}>3 (001)</option>
+                      <option value={4}>4 (0001)</option>
+                      <option value={5}>5 (00001)</option>
+                      <option value={6}>6 (000001)</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                  <div className="flex items-end gap-3 pb-0.5">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={br.includeYear || false} onChange={e => updateBR('includeYear', e.target.checked)}
+                        className="w-4 h-4 rounded border-neutral-300 text-neutral-900 focus:ring-neutral-500" />
+                      <span className="text-sm text-neutral-700">Include year</span>
+                    </label>
+                  </div>
+                  <div className="flex items-end gap-3 pb-0.5">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={br.resetYearly || false} onChange={e => updateBR('resetYearly', e.target.checked)}
+                        className="w-4 h-4 rounded border-neutral-300 text-neutral-900 focus:ring-neutral-500" />
+                      <span className="text-sm text-neutral-700">Reset yearly</span>
+                    </label>
+                  </div>
+                </div>
+                <div className="bg-neutral-50 rounded-xl px-4 py-3 flex items-center gap-6">
+                  <span className="text-xs text-neutral-400">Preview:</span>
+                  <span className="text-sm font-mono font-medium text-neutral-900">{preview}</span>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+        {/* Payment Methods */}
+        <div className="bg-white border border-neutral-200 rounded-2xl p-6 mt-4">
+          <h3 className="text-sm font-semibold text-neutral-900 mb-1">Payment Methods</h3>
+          <p className="text-xs text-neutral-400 mb-4">Configure which payment methods are available when recording payments. Cash and Bank Transfer are always available.</p>
+          {(() => {
+            const FIXED_METHODS = ['Cash', 'Bank Transfer'];
+            const methods = localSettings.paymentMethods || [];
+            const customMethods = methods.filter(m => !FIXED_METHODS.includes(m));
+            const updateCustom = (newCustom) => {
+              setLocalSettings(prev => ({ ...prev, paymentMethods: ['Cash', ...newCustom, 'Bank Transfer'] }));
+              setDirty(true);
+            };
+            return (
+              <div>
+                <div className="space-y-1.5 mb-3">
+                  {/* Fixed: Cash */}
+                  <div className="flex items-center gap-2">
+                    <svg className="w-4 h-4 text-neutral-200 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    <div className="flex-1 px-3 py-1.5 bg-neutral-50 border border-neutral-100 rounded-lg text-sm text-neutral-400">Cash</div>
+                  </div>
+                  {/* Custom methods (editable, draggable) */}
+                  {customMethods.map((m, i) => (
+                    <div key={i} className="flex items-center gap-2 group"
+                      draggable onDragStart={() => setDragIdx(i)} onDragEnd={() => { setDragIdx(null); setDragOverIdx(null); }}
+                      onDragOver={(e) => { e.preventDefault(); setDragOverIdx(i); }}
+                      onDrop={() => {
+                        if (dragIdx !== null && dragIdx !== i) {
+                          const arr = [...customMethods];
+                          const [moved] = arr.splice(dragIdx, 1);
+                          arr.splice(i, 0, moved);
+                          updateCustom(arr);
+                        }
+                        setDragIdx(null); setDragOverIdx(null);
+                      }}>
+                      <svg className="w-4 h-4 text-neutral-300 cursor-grab flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/>
+                      </svg>
+                      <input value={m} onChange={e => {
+                        const arr = [...customMethods]; arr[i] = e.target.value; updateCustom(arr);
+                      }} className="flex-1 px-3 py-1.5 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-300" />
+                      <button onClick={() => updateCustom(customMethods.filter((_, j) => j !== i))}
+                        className="p-1 text-neutral-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100" title="Remove">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                      </button>
+                    </div>
+                  ))}
+                  {/* Fixed: Bank Transfer */}
+                  <div className="flex items-center gap-2">
+                    <svg className="w-4 h-4 text-neutral-200 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    <div className="flex-1 px-3 py-1.5 bg-neutral-50 border border-neutral-100 rounded-lg text-sm text-neutral-400">Bank Transfer</div>
+                  </div>
+                </div>
+                <button onClick={() => updateCustom([...customMethods, ''])}
+                  className="flex items-center gap-1.5 text-xs text-neutral-500 hover:text-neutral-900 transition-colors mt-3">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  Add method
+                </button>
+              </div>
+            );
+          })()}
         </div>
       </>)}
 

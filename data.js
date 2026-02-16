@@ -40,7 +40,7 @@ const generateReservations = () => {
   const nationalities = ['NL', 'NL', 'NL', 'BE', 'BE', 'DE', 'FR', 'GB', 'US', 'IT', 'ES'];
   const etaTimes = ['', '', '', '', '', '14:00', '15:00', '16:00', '17:00', '18:00', '20:00'];
   const emailDomains = ['gmail.com', 'outlook.com', 'hotmail.com', 'yahoo.com', 'mail.be', 'telenet.be'];
-  const paymentMethods = ['Cash', 'Card (PIN)', 'Maestro', 'Mastercard', 'Visa', 'Bank Transfer', 'iDEAL'];
+  const paymentMethods = hotelSettings.paymentMethods || ['Cash', 'Card (PIN)', 'Maestro', 'Mastercard', 'Visa', 'Bank Transfer', 'iDEAL'];
 
   const reservations = [];
   let resId = 1;
@@ -177,7 +177,7 @@ const generateReservations = () => {
       room,
       type: roomType,
       guest,
-      bookingRef: `RMO-${String(currentId).padStart(5, '0')}`,
+      bookingRef: formatBookingRef(currentId),
       otaRef: bookedVia === 'booking.com' ? `BDC-${100000000 + Math.floor(Math.random() * 900000000)}` :
               bookedVia === 'expedia' ? `EXP-${10000000 + Math.floor(Math.random() * 90000000)}` :
               bookedVia === 'agency' ? `AGN-${100000 + Math.floor(Math.random() * 900000)}` : null,
@@ -279,6 +279,7 @@ const generateReservations = () => {
     const a = reservations[ai], b = reservations[bi];
     a.rooms.push(b.rooms[0]);
     a.guest = `${a.booker.firstName} ${a.booker.lastName}`;
+    used.add(ai);
     used.add(bi);
     merged++;
   }
@@ -296,7 +297,7 @@ const generateReservations = () => {
       const blockId = resId++;
       reservations.push({
         id: blockId, room, type: roomTypeMap[room], guest: '',
-        bookingRef: `RMO-${String(blockId).padStart(5, '0')}`, otaRef: null,
+        bookingRef: formatBookingRef(blockId), otaRef: null,
         checkin: addDays(today, offset).toISOString(), checkout: addDays(today, offset + len).toISOString(),
         status: 'future', isCheckedIn: false, checkedInTime: null, isCheckedOut: false, isOption: false,
         guestCount: 0, meals: { breakfast: false, lunch: false, dinner: false },
@@ -320,7 +321,7 @@ const generateReservations = () => {
 };
 
 // Data version — increment to force regeneration when model changes
-const DATA_VERSION = 27;
+const DATA_VERSION = 29;
 
 // Laad of genereer reserveringen met localStorage persistentie
 const getReservations = () => {
@@ -367,6 +368,15 @@ const getReservations = () => {
 // Genereer reserveringen 1x bij het laden
 const reservations = getReservations();
 
+// Sync bookingRefNumbering.nextNumber so new reservations get the right sequence
+if (hotelSettings.bookingRefNumbering) {
+  const maxResId = Math.max(...reservations.map(r => r.id), 0);
+  if (maxResId >= (hotelSettings.bookingRefNumbering.nextNumber || 1)) {
+    hotelSettings.bookingRefNumbering.nextNumber = maxResId + 1;
+    saveHotelSettings();
+  }
+}
+
 // Auto-extract booker profiles from reservations
 function syncBookerProfiles() {
   let changed = false;
@@ -377,14 +387,16 @@ function syncBookerProfiles() {
       (bp.firstName === res.booker.firstName && bp.lastName === res.booker.lastName && bp.phone === res.booker.phone)
     );
     if (!existing) {
+      const isVCC = res.otaRef && res.otaRef.startsWith('BDC-') && Math.random() < 0.4;
       bookerProfiles.push({
         id: 'bp-' + Date.now() + Math.random().toString(36).slice(2, 6),
         firstName: res.booker.firstName || '',
         lastName: res.booker.lastName || '',
         email: res.booker.email || '',
         phone: res.booker.phone || '',
+        language: detectLanguageFromPhone(res.booker.phone) || 'en',
         linkedCompanyId: null,
-        creditCard: null,
+        creditCard: isVCC ? { last4: String(1000 + Math.floor(Math.random() * 9000)), expiry: '12/26', cvc: '***', holder: 'Virtual Card', token: 'vcc_demo', isVCC: true } : null,
         priceAgreement: { amount: null, percentage: null },
         notes: '',
         createdAt: Date.now(),

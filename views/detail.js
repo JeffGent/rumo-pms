@@ -11,6 +11,8 @@ const ReservationDetailView = (props) => {
     billSplitMode, setBillSplitMode, billPaySelected, setBillPaySelected,
     billRecipientOverride, setBillRecipientOverride, billCustomLabels, setBillCustomLabels,
     amendingInvoice, setAmendingInvoice, amendRecipient, setAmendRecipient,
+    billTransferMode, setBillTransferMode, billTransferSearch, setBillTransferSearch,
+    billTransferTarget, setBillTransferTarget, billTransferSelected, setBillTransferSelected,
     setToastMessage, focusValRef, addRoomRef, dragPaymentRef,
     housekeepingStatus,
     showCheckoutWarning, setProfileSelectedProfile, setProfileEditingProfile,
@@ -23,6 +25,7 @@ const ReservationDetailView = (props) => {
   const [inventoryPopup, setInventoryPopup] = React.useState(null); // { catName, nights: [{ date, label, used, limit, full }], qty, cat, ci, co }
   const [inventorySelected, setInventorySelected] = React.useState(new Set()); // selected night indices
   const inventoryPendingRef = React.useRef(false); // guard against select double-fire
+  const [confirmBTPayment, setConfirmBTPayment] = React.useState(null); // payment id for bank transfer confirm popup
 
   const pageLabels = { dashboard: 'Dashboard', calendar: 'Calendar', housekeeping: 'Housekeeping', fb: 'F&B', reports: 'Reports' };
   const edCheckin = ed.checkin ? new Date(ed.checkin) : reservation.checkin;
@@ -43,6 +46,110 @@ const ReservationDetailView = (props) => {
   const goBack = () => {
     setSelectedReservation(null);
     setReservationTab('overview');
+    exitTransferMode();
+  };
+
+  // ── Transfer helpers ──────────────────────────────────────────────────────
+  const searchTransferTargets = (query) => {
+    if (!query || query.length < 2) return [];
+    const q = query.toLowerCase();
+    return reservations.filter(r =>
+      r.id !== ed.id && (
+        (r.bookingRef && r.bookingRef.toLowerCase().includes(q)) ||
+        (r.otaRef && r.otaRef.toLowerCase().includes(q)) ||
+        (r.guest && r.guest.toLowerCase().includes(q))
+      )
+    ).slice(0, 5);
+  };
+
+  const exitTransferMode = () => {
+    setBillTransferMode(null);
+    setBillTransferSearch('');
+    setBillTransferTarget(null);
+    setBillTransferSelected([]);
+  };
+
+  const assignPaymentsToInvoice = (inv) => {
+    if (!inv || billTransferSelected.length === 0) return;
+    const next = JSON.parse(JSON.stringify(ed));
+    let linked = 0;
+    billTransferSelected.forEach(payId => {
+      const p = next.payments.find(pp => pp.id === payId);
+      if (p && p.status === 'completed' && p.linkedInvoice !== inv.number) {
+        // Unlink from old invoice if reassigning
+        if (p.linkedInvoice) {
+          const oldInv = next.invoices.find(ii => ii.number === p.linkedInvoice);
+          if (oldInv && oldInv.linkedPayments) oldInv.linkedPayments = oldInv.linkedPayments.filter(id => id !== payId);
+        }
+        p.linkedInvoice = inv.number;
+        const invObj = next.invoices.find(ii => ii.id === inv.id);
+        if (invObj) { if (!invObj.linkedPayments) invObj.linkedPayments = []; invObj.linkedPayments.push(payId); }
+        linked++;
+      }
+    });
+    if (linked > 0) {
+      const total = billTransferSelected.reduce((s, payId) => { const p = next.payments.find(pp => pp.id === payId); return s + (p ? p.amount : 0); }, 0);
+      next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `${linked} payment(s) (EUR ${total.toFixed(2)}) linked to ${inv.number}`, user: 'Sophie' });
+      setEditingReservation(next);
+      setToastMessage(`${linked} payment(s) linked to ${inv.number}`);
+    }
+    exitTransferMode();
+  };
+
+  const executeTransfer = () => {
+    if (!billTransferTarget || billTransferSelected.length === 0) return;
+    const targetIdx = reservations.findIndex(r => r.id === billTransferTarget.id);
+    if (targetIdx === -1) { setToastMessage('Target reservation not found'); return; }
+
+    const next = JSON.parse(JSON.stringify(ed));
+    const target = JSON.parse(JSON.stringify(reservations[targetIdx]));
+
+    if (billTransferMode === 'items') {
+      const extrasToMove = [];
+      billTransferSelected.forEach(extraId => {
+        const idx = next.extras.findIndex(ex => ex.id === extraId);
+        if (idx !== -1) { extrasToMove.push(next.extras[idx]); next.extras.splice(idx, 1); }
+      });
+      const maxId = (target.extras || []).reduce((m, ex) => Math.max(m, ex.id || 0), 0);
+      extrasToMove.forEach((ex, i) => {
+        target.extras = target.extras || [];
+        target.extras.push({ ...ex, id: maxId + i + 1 });
+      });
+      const names = extrasToMove.map(ex => ex.name).join(', ');
+      const total = extrasToMove.reduce((s, ex) => s + (ex.quantity || 0) * (ex.unitPrice || 0), 0);
+      next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Transferred ${extrasToMove.length} item(s) to ${target.bookingRef}: ${names} (EUR ${total.toFixed(2)})`, user: 'Sophie' });
+      target.activityLog = target.activityLog || [];
+      target.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Received ${extrasToMove.length} item(s) from ${next.bookingRef}: ${names} (EUR ${total.toFixed(2)})`, user: 'Sophie' });
+      setToastMessage(`${extrasToMove.length} item(s) transferred to ${target.bookingRef}`);
+
+    } else if (billTransferMode === 'payments') {
+      const paymentsToMove = [];
+      billTransferSelected.forEach(payId => {
+        const idx = next.payments.findIndex(p => p.id === payId);
+        if (idx !== -1 && !next.payments[idx].linkedInvoice) {
+          const pay = { ...next.payments[idx], linkedInvoice: null };
+          paymentsToMove.push(pay);
+          next.payments.splice(idx, 1);
+        }
+      });
+      if (paymentsToMove.length === 0) { setToastMessage('No unlinked payments to move'); exitTransferMode(); return; }
+      paymentsToMove.forEach(p => {
+        target.payments = target.payments || [];
+        target.payments.push({ ...p, id: Date.now() + Math.floor(Math.random() * 10000) });
+      });
+      const total = paymentsToMove.reduce((s, p) => s + p.amount, 0);
+      next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Transferred ${paymentsToMove.length} payment(s) to ${target.bookingRef} (EUR ${total.toFixed(2)})`, user: 'Sophie' });
+      target.activityLog = target.activityLog || [];
+      target.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Received ${paymentsToMove.length} payment(s) from ${next.bookingRef} (EUR ${total.toFixed(2)})`, user: 'Sophie' });
+      setToastMessage(`${paymentsToMove.length} payment(s) transferred to ${target.bookingRef}`);
+    }
+
+    // Save target directly
+    reservations[targetIdx] = target;
+    saveReservationSingle(target);
+    // Update source via editingReservation (auto-save picks it up)
+    setEditingReservation(next);
+    exitTransferMode();
   };
 
   const tabs = [
@@ -151,7 +258,7 @@ const ReservationDetailView = (props) => {
           <a className="cal-nav-link"><Icons.Calendar width="18" height="18" /><span>Reservations</span></a>
           <a className="cal-nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18"><circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/><line x1="10.5" y1="7.5" x2="6.5" y2="16.5"/><line x1="13.5" y1="7.5" x2="17.5" y2="16.5"/></svg><span>Channel manager</span></a>
           <a className={`cal-nav-link${activePage === 'profiles' ? ' active' : ''}`} onClick={() => { setActivePage('profiles'); setSelectedReservation(null); }}><Icons.Users width="18" height="18" /><span>Profiles</span></a>
-          <a className="cal-nav-link"><Icons.CreditCard width="18" height="18" /><span>Payments</span></a>
+          <a className={`cal-nav-link${activePage === 'payments' ? ' active' : ''}`} onClick={() => { setActivePage('payments'); setSelectedReservation(null); }}><Icons.CreditCard width="18" height="18" /><span>Payments</span></a>
           <a className={`cal-nav-link${activePage === 'reports' ? ' active' : ''}`} onClick={() => { setActivePage('reports'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span>Reports</span></a>
           <a className={`cal-nav-link${activePage === 'settings' ? ' active' : ''}`} onClick={() => { setActivePage('settings'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>Settings</span></a>
         </nav>
@@ -301,7 +408,7 @@ const ReservationDetailView = (props) => {
           <div className="flex items-center justify-between mb-4 border-b border-neutral-200">
             <div className="flex items-center gap-1 overflow-x-auto">
               {tabs.map(tab => (
-                <button key={tab.id} onClick={() => { setReservationTab(tab.id); setAmendingInvoice(null); setAmendRecipient(null); }}
+                <button key={tab.id} onClick={() => { setReservationTab(tab.id); setAmendingInvoice(null); setAmendRecipient(null); exitTransferMode(); }}
                   className={`px-4 py-2.5 text-sm font-medium transition-colors relative whitespace-nowrap ${
                     reservationTab === tab.id
                       ? 'text-neutral-900'
@@ -438,7 +545,13 @@ const ReservationDetailView = (props) => {
                       placeholder="Email"
                       className="w-full px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
                     <div className="flex gap-1.5">
-                      <input type="tel" value={ed.booker.phone} onChange={(e) => updateEd('booker.phone', e.target.value)}
+                      <input type="tel" value={ed.booker.phone} onChange={(e) => {
+                          updateEd('booker.phone', e.target.value);
+                          if (!ed.booker.language || ed.booker.language === 'en') {
+                            const detected = detectLanguageFromPhone(e.target.value);
+                            if (detected) updateEd('booker.language', detected);
+                          }
+                        }}
                         onFocus={onFocusTrack} onBlur={onBlurLog('Booker phone')}
                         placeholder="Phone"
                         className="flex-1 px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
@@ -451,6 +564,13 @@ const ReservationDetailView = (props) => {
                           </svg>
                         </a>
                       )}
+                    </div>
+                    <div className="relative">
+                      <select value={ed.booker.language || 'en'} onChange={(e) => updateEd('booker.language', e.target.value)}
+                        className="w-full px-2.5 py-1.5 pr-7 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all appearance-none cursor-pointer">
+                        {SUPPORTED_LANGUAGES.map(l => <option key={l.code} value={l.code}>{l.label}</option>)}
+                      </select>
+                      <svg className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
                     </div>
                   </div>
 
@@ -1098,7 +1218,7 @@ const ReservationDetailView = (props) => {
                     ? `${primaryGuest.firstName || ''} ${primaryGuest.lastName || ''}`.trim()
                     : '';
                   return (
-                <div key={ri} className={`bg-white border border-neutral-200 rounded-2xl overflow-hidden border-l-4 ${
+                <div key={ri} className={`bg-white border border-neutral-200 rounded-2xl border-l-4 ${
                   ({ confirmed: 'border-l-blue-400', option: 'border-l-pink-400', 'checked-in': 'border-l-emerald-400', 'checked-out': 'border-l-neutral-300', 'no-show': 'border-l-red-400', cancelled: 'border-l-red-300', blocked: 'border-l-slate-400' })[room.status || 'confirmed'] || 'border-l-blue-400'
                 } ${isExpanded && isCollapsible ? 'md:col-span-2' : ''}`}>
                   {/* Room Header — click to collapse/expand */}
@@ -1143,45 +1263,147 @@ const ReservationDetailView = (props) => {
                           )}
                         </button>
 
-                        {/* Change Room Popup */}
-                        {changeRoomTarget === ri && (
-                          <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-2xl border border-neutral-200 py-2 z-50">
-                            <div className="px-3 py-1.5 text-xs font-medium text-neutral-500 uppercase tracking-wider">Available Rooms</div>
-                            {(() => {
-                              const allRooms = getAllRooms();
-                              const usedRooms = ed.rooms.map(r => r.roomNumber);
-                              const roomCi = room.checkin ? new Date(room.checkin) : new Date(ed.checkin || reservation.checkin);
-                              const roomCo = room.checkout ? new Date(room.checkout) : new Date(ed.checkout || reservation.checkout);
-                              const flatEntries = buildFlatRoomEntries(reservations);
-                              const freeRooms = allRooms.filter(rm => {
-                                if (usedRooms.includes(rm)) return false;
-                                return !flatEntries.some(r => {
-                                  if (r.room !== rm) return false;
+                        {/* Change Room / Move Room Popup */}
+                        {changeRoomTarget === ri && (() => {
+                          const allRooms = getAllRooms();
+                          const usedRooms = ed.rooms.map(r => r.roomNumber);
+                          const roomCi = room.checkin ? new Date(room.checkin) : new Date(ed.checkin || reservation.checkin);
+                          const roomCo = room.checkout ? new Date(room.checkout) : new Date(ed.checkout || reservation.checkout);
+                          const flatEntries = buildFlatRoomEntries(reservations);
+                          const freeRooms = allRooms.filter(rm => {
+                            if (usedRooms.includes(rm)) return false;
+                            return !flatEntries.some(r => {
+                              if (r.room !== rm) return false;
+                              if (r.id === reservation.id) return false;
+                              const st = r.reservationStatus || 'confirmed';
+                              if (st === 'cancelled' || st === 'no-show') return false;
+                              const rCi = new Date(r.checkin);
+                              const rCo = new Date(r.checkout);
+                              return rCi < roomCo && rCo > roomCi;
+                            });
+                          });
+                          // Check if this room has invoiced items (then it cannot be moved)
+                          const roomInvoiced = (ed.invoices || []).some(inv => {
+                            if (inv.type === 'proforma' || inv.status === 'credited') return false;
+                            return (inv.items || []).some(it => it.key && it.key.includes(`room-${ri}-`));
+                          });
+                          const canMove = ed.rooms.length > 1 && !roomInvoiced;
+                          return (
+                          <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-xl shadow-2xl border border-neutral-200 py-2 z-50" style={{ maxHeight: 380, overflowY: 'auto' }}>
+                            {/* Section 1: Change room number */}
+                            <div className="px-3 py-1.5 text-[11px] font-semibold text-neutral-400 uppercase tracking-wider">Change Room</div>
+                            {freeRooms.length === 0
+                              ? <div className="px-3 py-2 text-xs text-neutral-400">No rooms available for these dates</div>
+                              : <div style={{ maxHeight: 140, overflowY: 'auto' }}>
+                                {freeRooms.map(rm => {
+                                  const rt = roomTypes.find(t => (t.rooms || []).includes(rm));
+                                  return (
+                                  <button key={rm} onClick={() => {
+                                    const next = JSON.parse(JSON.stringify(ed));
+                                    const oldRoom = next.rooms[ri].roomNumber;
+                                    next.rooms[ri].roomNumber = rm;
+                                    next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Room changed: ${oldRoom} → ${rm}`, user: 'Sophie' });
+                                    setEditingReservation(next);
+                                    setChangeRoomTarget(null);
+                                    setToastMessage(`Room changed to ${rm}`);
+                                  }} className="w-full px-3 py-1.5 text-sm text-left hover:bg-neutral-50 transition-colors flex items-center justify-between">
+                                    <span className="font-medium">{rm}</span>
+                                    {rt && <span className="text-[11px] text-neutral-400">{rt.name}</span>}
+                                  </button>
+                                  );
+                                })}
+                              </div>
+                            }
+
+                            {/* Section 2: Move to another reservation */}
+                            <div className="border-t border-neutral-100 mt-1 pt-1">
+                              <div className="px-3 py-1.5 text-[11px] font-semibold text-neutral-400 uppercase tracking-wider">Move to Reservation</div>
+                              {!canMove ? (
+                                <div className="px-3 py-2 text-xs text-neutral-400">
+                                  {ed.rooms.length <= 1 ? 'Only room — cannot move' : 'Room has invoiced items — cannot move'}
+                                </div>
+                              ) : (() => {
+                                const moveTargets = reservations.filter(r => {
                                   if (r.id === reservation.id) return false;
                                   const st = r.reservationStatus || 'confirmed';
-                                  if (st === 'cancelled' || st === 'no-show') return false;
-                                  const rCi = new Date(r.checkin);
-                                  const rCo = new Date(r.checkout);
-                                  return rCi < roomCo && rCo > roomCi;
-                                });
-                              });
-                              if (freeRooms.length === 0) return <div className="px-3 py-2 text-xs text-neutral-400">No rooms available</div>;
-                              return freeRooms.map(rm => (
-                                <button key={rm} onClick={() => {
-                                  const next = JSON.parse(JSON.stringify(ed));
-                                  const oldRoom = next.rooms[ri].roomNumber;
-                                  next.rooms[ri].roomNumber = rm;
-                                  next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Room changed: ${oldRoom} → ${rm}`, user: 'Sophie' });
-                                  setEditingReservation(next);
-                                  setChangeRoomTarget(null);
-                                  setToastMessage(`Room changed to ${rm}`);
-                                }} className="w-full px-3 py-2 text-sm text-left hover:bg-neutral-50 transition-colors flex items-center justify-between">
-                                  <span className="font-medium">{rm}</span>
-                                </button>
-                              ));
-                            })()}
+                                  if (st === 'cancelled' || st === 'no-show' || st === 'checked-out') return false;
+                                  return true;
+                                }).slice(0, 8);
+                                return (
+                                  <div>
+                                    <div className="px-3 mb-1">
+                                      <input
+                                        type="text"
+                                        placeholder="Search reservation..."
+                                        className="w-full px-2 py-1 text-xs border border-neutral-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-neutral-400"
+                                        id={`move-room-search-${ri}`}
+                                        onChange={(e) => {
+                                          const el = document.getElementById(`move-room-results-${ri}`);
+                                          if (el) el.setAttribute('data-q', e.target.value.toLowerCase());
+                                          // Force re-render via state
+                                          setChangeRoomTarget(ri);
+                                        }}
+                                      />
+                                    </div>
+                                    <div id={`move-room-results-${ri}`} data-q="" style={{ maxHeight: 120, overflowY: 'auto' }}>
+                                      {(() => {
+                                        const searchEl = document.getElementById(`move-room-search-${ri}`);
+                                        const q = searchEl ? searchEl.value.toLowerCase() : '';
+                                        const filtered = reservations.filter(r => {
+                                          if (r.id === reservation.id) return false;
+                                          const st = r.reservationStatus || 'confirmed';
+                                          if (st === 'cancelled' || st === 'no-show' || st === 'checked-out') return false;
+                                          if (!q) return true;
+                                          return (r.guest || '').toLowerCase().includes(q) ||
+                                            (r.bookingRef || '').toLowerCase().includes(q) ||
+                                            `${r.booker?.firstName || ''} ${r.booker?.lastName || ''}`.toLowerCase().includes(q);
+                                        }).slice(0, 8);
+                                        if (filtered.length === 0) return <div className="px-3 py-2 text-xs text-neutral-400">No matching reservations</div>;
+                                        return filtered.map(target => (
+                                          <button key={target.id} onClick={() => {
+                                            // Move room from this reservation to target
+                                            const next = JSON.parse(JSON.stringify(ed));
+                                            const movedRoom = next.rooms.splice(ri, 1)[0];
+                                            // Recalc reservation dates
+                                            if (next.rooms.length > 0) {
+                                              const dates = next.rooms.map(r => ({ ci: new Date(r.checkin), co: new Date(r.checkout) }));
+                                              next.checkin = new Date(Math.min(...dates.map(d => d.ci))).toISOString();
+                                              next.checkout = new Date(Math.max(...dates.map(d => d.co))).toISOString();
+                                            }
+                                            next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Room ${movedRoom.roomNumber} moved to ${target.bookingRef}`, user: 'Sophie' });
+                                            setEditingReservation(next);
+                                            // Add room to target reservation (module-level)
+                                            const targetRes = reservations.find(r => r.id === target.id);
+                                            if (targetRes) {
+                                              // Convert dates to Date objects for module-level array
+                                              movedRoom.checkin = new Date(movedRoom.checkin);
+                                              movedRoom.checkout = new Date(movedRoom.checkout);
+                                              targetRes.rooms.push(movedRoom);
+                                              targetRes.checkin = new Date(Math.min(...targetRes.rooms.map(r => new Date(r.checkin))));
+                                              targetRes.checkout = new Date(Math.max(...targetRes.rooms.map(r => new Date(r.checkout))));
+                                              targetRes.activityLog = targetRes.activityLog || [];
+                                              targetRes.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Room ${movedRoom.roomNumber} received from ${ed.bookingRef}`, user: 'Sophie' });
+                                              try { localStorage.setItem('hotelReservations', JSON.stringify(reservations)); } catch (e) {}
+                                            }
+                                            setChangeRoomTarget(null);
+                                            setToastMessage(`Room ${movedRoom.roomNumber} moved to ${target.bookingRef}`);
+                                          }} className="w-full px-3 py-1.5 text-left hover:bg-neutral-50 transition-colors">
+                                            <div className="flex items-center justify-between">
+                                              <span className="text-xs font-medium text-neutral-900">{target.bookingRef}</span>
+                                              <span className="text-[11px] text-neutral-400">{target.rooms?.length || 0} room{(target.rooms?.length || 0) !== 1 ? 's' : ''}</span>
+                                            </div>
+                                            <div className="text-[11px] text-neutral-500">{target.guest || `${target.booker?.firstName || ''} ${target.booker?.lastName || ''}`.trim()}</div>
+                                          </button>
+                                        ));
+                                      })()}
+                                    </div>
+                                  </div>
+                                );
+                              })()}
+                            </div>
                           </div>
-                        )}
+                          );
+                        })()}
                       </div>
                       {isCollapsible && (
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`w-4 h-4 text-neutral-300 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`}><path d="M9 18l6-6-6-6"/></svg>
@@ -1475,7 +1697,13 @@ const ReservationDetailView = (props) => {
                                 placeholder="Email"
                                 className="w-full px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
                               <div className="flex gap-1.5">
-                                <input type="tel" value={g.phone || ''} onChange={(e) => updateEd(`rooms.${ri}.guests.${gi}.phone`, e.target.value)}
+                                <input type="tel" value={g.phone || ''} onChange={(e) => {
+                                    updateEd(`rooms.${ri}.guests.${gi}.phone`, e.target.value);
+                                    if (!g.language || g.language === 'en') {
+                                      const detected = detectLanguageFromPhone(e.target.value);
+                                      if (detected) updateEd(`rooms.${ri}.guests.${gi}.language`, detected);
+                                    }
+                                  }}
                                   placeholder="Phone"
                                   className="flex-1 min-w-0 px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
                                 {g.phone && (
@@ -1487,6 +1715,13 @@ const ReservationDetailView = (props) => {
                                     </svg>
                                   </a>
                                 )}
+                              </div>
+                              <div className="relative">
+                                <select value={g.language || 'en'} onChange={(e) => updateEd(`rooms.${ri}.guests.${gi}.language`, e.target.value)}
+                                  className="w-full px-2.5 py-1.5 pr-7 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all appearance-none cursor-pointer">
+                                  {SUPPORTED_LANGUAGES.map(l => <option key={l.code} value={l.code}>{l.label}</option>)}
+                                </select>
+                                <svg className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
                               </div>
                               <select value={g.nationality || 'NL'} onChange={(e) => updateEd(`rooms.${ri}.guests.${gi}.nationality`, e.target.value)}
                                 className="w-full px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all appearance-none">
@@ -1828,7 +2063,10 @@ const ReservationDetailView = (props) => {
             window._printInvoice = (inv, ed, payments) => {
               const r = inv.recipient || {};
               const invPayments = (payments || []).filter(p => (inv.linkedPayments || []).includes(p.id));
-              const invPaid = invPayments.reduce((s, p) => s + p.amount, 0);
+              const confirmedPayments = invPayments.filter(p => p.method !== 'Bank Transfer' || p.confirmed !== false);
+              const pendingBTPayments = invPayments.filter(p => p.method === 'Bank Transfer' && p.confirmed === false);
+              const invPaid = confirmedPayments.reduce((s, p) => s + p.amount, 0);
+              const pendingBTTotal = pendingBTPayments.reduce((s, p) => s + p.amount, 0);
               const isCredit = inv.type === 'credit';
               const vatGroups = {};
               (inv.items || []).forEach(item => {
@@ -1919,7 +2157,7 @@ td:last-child { text-align: right; font-weight: 500; }
 ${Object.entries(vatGroups).map(([rate, g]) => '<div class="row vat"><span>Net (' + rate + '% VAT)</span><span>' + cur + ' ' + g.net.toFixed(2) + '</span></div><div class="row vat"><span>VAT ' + rate + '%</span><span>' + cur + ' ' + g.vat.toFixed(2) + '</span></div>').join('')}
 <div class="row total"><span>Total</span><span>${cur} ${inv.amount.toFixed(2)}</span></div>
 </div>
-${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPayments.map(p => '<div class="pay-row"><span class="pay-method">' + p.method + ' · ' + p.date + '</span><span>' + cur + ' ' + p.amount.toFixed(2) + '</span></div>').join('') + (invPaid < inv.amount && !isCredit ? '<div class="pay-row due"><span>Amount due</span><span>' + cur + ' ' + (inv.amount - invPaid).toFixed(2) + '</span></div>' : '') + '</div>' : ''}
+${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + confirmedPayments.map(p => '<div class="pay-row"><span class="pay-method">' + p.method + ' · ' + p.date + '</span><span>' + cur + ' ' + p.amount.toFixed(2) + '</span></div>').join('') + (pendingBTPayments.length > 0 ? pendingBTPayments.map(p => '<div class="pay-row" style="color:#b45309;"><span class="pay-method">Expected payment: Bank Transfer</span><span>' + cur + ' ' + p.amount.toFixed(2) + '</span></div>').join('') : '') + (invPaid + pendingBTTotal < inv.amount && !isCredit ? '<div class="pay-row due"><span>Amount due</span><span>' + cur + ' ' + (inv.amount - invPaid - pendingBTTotal).toFixed(2) + '</span></div>' : '') + (invPaid < inv.amount && pendingBTTotal > 0 && !isCredit ? '<div class="pay-row due"><span>Balance (excl. expected)</span><span>' + cur + ' ' + (inv.amount - invPaid).toFixed(2) + '</span></div>' : '') + '</div>' : ''}
 <div class="ref">Booking ref: ${ed.bookingRef || '—'}${ed.otaRef ? ' · OTA ref: ' + ed.otaRef : ''}</div>
 <div class="footer">${hotelSettings.hotelName || ''} · ${hotelSettings.hotelAddress || ''} · ${hotelSettings.hotelVat || ''}</div>
 </body></html>`;
@@ -1977,8 +2215,7 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
 
             const createInvoice = (type, quick, checkout) => {
               if (selectedItems.length === 0) return;
-              const prefix = type === 'proforma' ? 'PRO' : 'INV';
-              const invNum = `${prefix}-${10000000 + Math.floor(Math.random() * 9000000)}`;
+              const invNum = getNextInvoiceNumber(type === 'proforma' ? 'proforma' : 'invoice');
               const invoiceItems = selectedItems.map(i => ({ key: i.key, label: billCustomLabels[i.key] || i.label, detail: i.detail, amount: i.amount, vatRate: i.vatRate }));
               const next = JSON.parse(JSON.stringify(ed));
               // Link payments: skip for proformas (concept, no payment linking)
@@ -2072,33 +2309,104 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
                           {/* Compact mode — summary */}
                           <div className="flex items-center justify-between mb-3">
                             <div className="text-xs font-medium text-neutral-500 uppercase tracking-wider">Uninvoiced</div>
-                            <button onClick={() => { setBillSplitMode(true); setBillSelected(null); }}
-                              className="text-xs text-neutral-400 hover:text-neutral-900 transition-colors">
-                              Split items
-                            </button>
+                            <div className="flex items-center gap-3">
+                              {uninvoicedItems.some(i => i.type === 'extra') && (
+                                <button onClick={() => { setBillTransferMode(billTransferMode === 'items' ? null : 'items'); setBillTransferSelected([]); setBillTransferSearch(''); setBillTransferTarget(null); setBillSplitMode(false); setBillSelected(null); }}
+                                  className={`text-xs transition-colors ${billTransferMode === 'items' ? 'text-violet-600 font-medium' : 'text-neutral-400 hover:text-neutral-900'}`}>
+                                  Transfer
+                                </button>
+                              )}
+                              <button onClick={() => { setBillSplitMode(true); setBillSelected(null); exitTransferMode(); }}
+                                className="text-xs text-neutral-400 hover:text-neutral-900 transition-colors">
+                                Split items
+                              </button>
+                            </div>
                           </div>
-                          <div className="text-sm text-neutral-700 mb-1">
-                            {uninvoicedItems.filter(i => i.type === 'room').length > 0 && (
-                              <span>{uninvoicedItems.filter(i => i.type === 'room').length} room{uninvoicedItems.filter(i => i.type === 'room').length !== 1 ? 's' : ''}</span>
-                            )}
-                            {uninvoicedItems.filter(i => i.type === 'extra').length > 0 && (
-                              <span>{uninvoicedItems.filter(i => i.type === 'room').length > 0 ? ' · ' : ''}{uninvoicedItems.filter(i => i.type === 'extra').length} extra{uninvoicedItems.filter(i => i.type === 'extra').length !== 1 ? 's' : ''}</span>
-                            )}
-                          </div>
-                          <div className="text-lg font-light text-neutral-900 mb-3 font-serif">EUR {selectedTotal}</div>
-                          <input value={ed.billingRecipient?.reference || ''} onChange={(e) => updateEd('billingRecipient.reference', e.target.value)}
-                            placeholder="Reference (PO, cost center...)"
-                            className="w-full px-3 py-1.5 mb-2 bg-neutral-50 border border-neutral-200 rounded-lg text-xs text-neutral-600 placeholder-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
-                          <div className="flex gap-2">
-                            <button onClick={() => createInvoice('standard', true, true)}
-                              className="flex-1 px-3 py-2 rounded-xl text-xs font-medium bg-neutral-900 text-white hover:bg-neutral-800 transition-colors">
-                              Quick invoice and check-out
-                            </button>
-                            <button onClick={() => createInvoice('proforma', true)}
-                              className="px-3 py-2 rounded-xl text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors">
-                              Proforma
-                            </button>
-                          </div>
+
+                          {billTransferMode === 'items' ? (
+                            <div className="space-y-3">
+                              <div className="space-y-1 max-h-48 overflow-y-auto">
+                                {uninvoicedItems.filter(i => i.type === 'extra').map(item => {
+                                  const extraId = parseInt(item.key.replace('extra-', ''));
+                                  const isSelected = billTransferSelected.includes(extraId);
+                                  return (
+                                    <div key={item.key} onClick={() => setBillTransferSelected(prev => isSelected ? prev.filter(id => id !== extraId) : [...prev, extraId])}
+                                      className={`flex items-center gap-3 p-2.5 rounded-xl cursor-pointer transition-all ${isSelected ? 'bg-violet-50 border border-violet-200' : 'bg-neutral-50 border border-transparent hover:bg-neutral-100'}`}>
+                                      <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${isSelected ? 'bg-violet-600 border-violet-600' : 'border-neutral-300'}`}>
+                                        {isSelected && <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" className="w-3 h-3"><polyline points="20 6 9 17 4 12"/></svg>}
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="text-xs font-medium text-neutral-900">{item.label}</div>
+                                        <div className="text-xs text-neutral-500">{item.detail}</div>
+                                      </div>
+                                      <div className="text-xs font-medium text-neutral-900 flex-shrink-0">EUR {item.amount}</div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              <div className="relative">
+                                <input value={billTransferSearch} onChange={(e) => { setBillTransferSearch(e.target.value); setBillTransferTarget(null); }}
+                                  placeholder="Search booking ref or guest..."
+                                  className="w-full px-3 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent" />
+                                {billTransferTarget && (
+                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-emerald-500 absolute right-2 top-1/2 -translate-y-1/2">
+                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                                  </svg>
+                                )}
+                                {billTransferSearch.length >= 2 && !billTransferTarget && (() => {
+                                  const results = searchTransferTargets(billTransferSearch);
+                                  return results.length > 0 ? (
+                                    <div className="absolute z-20 left-0 right-0 top-full mt-1 bg-white border border-neutral-200 rounded-lg shadow-lg overflow-hidden">
+                                      {results.map(r => (
+                                        <button key={r.id} onClick={() => { setBillTransferTarget(r); setBillTransferSearch(`${r.bookingRef} — ${r.guest}`); }}
+                                          className="w-full px-3 py-2 text-left text-xs hover:bg-neutral-50 flex items-center justify-between border-b border-neutral-50 last:border-0">
+                                          <span className="font-medium text-neutral-900">{r.guest}</span>
+                                          <span className="text-neutral-400">{r.bookingRef}</span>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <div className="absolute z-20 left-0 right-0 top-full mt-1 bg-white border border-neutral-200 rounded-lg shadow-lg p-3 text-xs text-neutral-400 text-center">No reservations found</div>
+                                  );
+                                })()}
+                              </div>
+                              <div className="flex gap-2">
+                                <button onClick={executeTransfer} disabled={!billTransferTarget || billTransferSelected.length === 0}
+                                  className={`flex-1 px-3 py-2 rounded-xl text-xs font-medium transition-colors ${billTransferTarget && billTransferSelected.length > 0 ? 'bg-violet-600 text-white hover:bg-violet-700' : 'bg-neutral-100 text-neutral-400 cursor-not-allowed'}`}>
+                                  Transfer {billTransferSelected.length} item{billTransferSelected.length !== 1 ? 's' : ''}
+                                </button>
+                                <button onClick={exitTransferMode}
+                                  className="px-3 py-2 rounded-xl text-xs font-medium text-neutral-500 bg-neutral-100 hover:bg-neutral-200 transition-colors">
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="text-sm text-neutral-700 mb-1">
+                                {uninvoicedItems.filter(i => i.type === 'room').length > 0 && (
+                                  <span>{uninvoicedItems.filter(i => i.type === 'room').length} room{uninvoicedItems.filter(i => i.type === 'room').length !== 1 ? 's' : ''}</span>
+                                )}
+                                {uninvoicedItems.filter(i => i.type === 'extra').length > 0 && (
+                                  <span>{uninvoicedItems.filter(i => i.type === 'room').length > 0 ? ' · ' : ''}{uninvoicedItems.filter(i => i.type === 'extra').length} extra{uninvoicedItems.filter(i => i.type === 'extra').length !== 1 ? 's' : ''}</span>
+                                )}
+                              </div>
+                              <div className="text-lg font-light text-neutral-900 mb-3 font-serif">EUR {selectedTotal}</div>
+                              <input value={ed.billingRecipient?.reference || ''} onChange={(e) => updateEd('billingRecipient.reference', e.target.value)}
+                                placeholder="Reference (PO, cost center...)"
+                                className="w-full px-3 py-1.5 mb-2 bg-neutral-50 border border-neutral-200 rounded-lg text-xs text-neutral-600 placeholder-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
+                              <div className="flex gap-2">
+                                <button onClick={() => createInvoice('standard', true, true)}
+                                  className="flex-1 px-3 py-2 rounded-xl text-xs font-medium bg-neutral-900 text-white hover:bg-neutral-800 transition-colors">
+                                  Quick invoice and check-out
+                                </button>
+                                <button onClick={() => createInvoice('proforma', true)}
+                                  className="px-3 py-2 rounded-xl text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors">
+                                  Proforma
+                                </button>
+                              </div>
+                            </>
+                          )}
                         </>
                       ) : (
                         <>
@@ -2374,8 +2682,8 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
                           {invPayments.length > 0 && (
                             <div className="mt-1 space-y-0.5">
                               {invPayments.map(p => (
-                                <div key={p.id} className="flex justify-between text-xs text-emerald-600">
-                                  <span>{p.method} · {p.date}</span>
+                                <div key={p.id} className={`flex justify-between text-xs ${p.method === 'Bank Transfer' && p.confirmed === false ? 'text-amber-600' : 'text-emerald-600'}`}>
+                                  <span>{p.method === 'Bank Transfer' && p.confirmed === false ? 'Expected: Bank Transfer' : p.method} · {p.date}</span>
                                   <span>EUR {p.amount}</span>
                                 </div>
                               ))}
@@ -2457,7 +2765,7 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
                               // Archive the proforma
                               invObj.status = 'finalized';
                               // Create a real invoice with the same items + recipient
-                              const newInvNum = `INV-${10000000 + Math.floor(Math.random() * 9000000)}`;
+                              const newInvNum = getNextInvoiceNumber('invoice');
                               next.invoices.push({ id: Date.now(), number: newInvNum, date: new Date().toISOString().split('T')[0], amount: inv.amount, type: 'invoice', status: 'created', items: inv.items ? inv.items.map(i => ({ ...i })) : [], linkedPayments: [], recipient: inv.recipient ? { ...inv.recipient } : null, reference: inv.reference || '', fromProforma: inv.number });
                               // Unlink any payments from the proforma (user links them manually to the new invoice)
                               invPayments.forEach(p => { const pp = next.payments.find(pp => pp.id === p.id); if (pp) pp.linkedInvoice = null; });
@@ -2487,7 +2795,7 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
                               const next = JSON.parse(JSON.stringify(ed));
                               const invObj = next.invoices.find(ii => ii.id === inv.id);
                               if (invObj) invObj.status = 'credited';
-                              const creditNum = `CN-${10000000 + Math.floor(Math.random() * 9000000)}`;
+                              const creditNum = getNextInvoiceNumber('credit');
                               next.invoices.push({ id: Date.now(), number: creditNum, date: new Date().toISOString().split('T')[0], amount: inv.amount, type: 'credit', status: 'created', items: inv.items || [], linkedPayments: [], creditFor: inv.number, recipient: inv.recipient ? { ...inv.recipient } : null, reference: inv.reference || '' });
                               // Unlink payments from credited invoice — return to unlinked pool
                               invPayments.forEach(p => { const pp = next.payments.find(pp => pp.id === p.id); if (pp) pp.linkedInvoice = null; });
@@ -2538,7 +2846,7 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
                             if (!invObj) return;
                             // 1. Credit the original
                             invObj.status = 'credited';
-                            const creditNum = `CN-${10000000 + Math.floor(Math.random() * 9000000)}`;
+                            const creditNum = getNextInvoiceNumber('credit');
                             next.invoices.push({ id: Date.now(), number: creditNum, date: new Date().toISOString().split('T')[0], amount: inv.amount, type: 'credit', status: 'created', items: inv.items || [], linkedPayments: [], creditFor: inv.number, recipient: inv.recipient ? { ...inv.recipient } : null, reference: inv.reference || '' });
                             // Unlink payments from credited invoice
                             invPayments.forEach(p => { const pp = next.payments.find(pp => pp.id === p.id); if (pp) pp.linkedInvoice = null; });
@@ -2553,7 +2861,7 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
                               newRecipient = inv.recipient ? { ...inv.recipient } : null;
                             }
                             // 3. Create amended invoice with same items
-                            const newInvNum = `INV-${10000000 + Math.floor(Math.random() * 9000000)}`;
+                            const newInvNum = getNextInvoiceNumber('invoice');
                             next.invoices.push({ id: Date.now() + 2, number: newInvNum, date: new Date().toISOString().split('T')[0], amount: inv.amount, type: 'invoice', status: 'created', items: inv.items ? inv.items.map(i => ({ ...i })) : [], linkedPayments: [], recipient: newRecipient, reference: inv.reference || '', amendsInvoice: inv.number });
                             // Re-link payments to new invoice
                             invPayments.forEach(p => { const pp = next.payments.find(pp => pp.id === p.id); if (pp) pp.linkedInvoice = newInvNum; });
@@ -2710,26 +3018,46 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
                 <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden">
                 {/* Payments List */}
                 <div className="p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                      {ed.payments.length} payment{ed.payments.length !== 1 ? 's' : ''}
+                    </div>
+                    {ed.payments.length > 0 && (
+                      <button onClick={() => { if (billTransferMode === 'payments') { exitTransferMode(); } else { setBillTransferMode('payments'); setBillTransferSelected([]); setBillTransferSearch(''); setBillTransferTarget(null); setBillSplitMode(false); setBillSelected(null); } }}
+                        className={`text-xs transition-colors ${billTransferMode === 'payments' ? 'text-violet-600 font-medium' : 'text-neutral-400 hover:text-neutral-900'}`}>
+                        {billTransferMode === 'payments' ? 'Cancel' : 'Transfer'}
+                      </button>
+                    )}
+                  </div>
                   <div className="space-y-2">
                     {ed.payments.map((payment) => {
+                      const isTransferMode = billTransferMode === 'payments';
+                      const isTransferChecked = isTransferMode && billTransferSelected.includes(payment.id);
                       const canLink = payment.status === 'completed' && !payment.linkedInvoice;
                       const canReassign = payment.status === 'completed' && payment.linkedInvoice && activeInvoices.filter(inv => inv.status !== 'credited' && inv.number !== payment.linkedInvoice).length > 0;
-                      const canDrag = (canLink || canReassign) && activeInvoices.some(inv => inv.status !== 'credited');
-                      const canCheck = canLink && billSplitMode && uninvoicedItems.length > 0;
+                      const canDrag = (canLink || canReassign) && activeInvoices.some(inv => inv.status !== 'credited') && !isTransferMode;
+                      const canCheck = canLink && billSplitMode && uninvoicedItems.length > 0 && !isTransferMode;
                       const isPayChecked = billPaySelected.includes(payment.id);
                       return (
                       <div key={payment.id}
-                        draggable={(canDrag || canReassign) && !canCheck}
-                        onDragStart={(canDrag || canReassign) && !canCheck ? (e) => { dragPaymentRef.current = payment.id; e.dataTransfer.effectAllowed = 'move'; e.currentTarget.style.opacity = '0.5'; } : undefined}
-                        onDragEnd={(canDrag || canReassign) && !canCheck ? (e) => { dragPaymentRef.current = null; e.currentTarget.style.opacity = '1'; } : undefined}
-                        onClick={canCheck ? () => setBillPaySelected(prev => prev.includes(payment.id) ? prev.filter(id => id !== payment.id) : [...prev, payment.id]) : undefined}
+                        draggable={(canDrag || canReassign) && !canCheck && !isTransferMode}
+                        onDragStart={(canDrag || canReassign) && !canCheck && !isTransferMode ? (e) => { dragPaymentRef.current = payment.id; e.dataTransfer.effectAllowed = 'move'; e.currentTarget.style.opacity = '0.5'; } : undefined}
+                        onDragEnd={(canDrag || canReassign) && !canCheck && !isTransferMode ? (e) => { dragPaymentRef.current = null; e.currentTarget.style.opacity = '1'; } : undefined}
+                        onClick={isTransferMode ? () => setBillTransferSelected(prev => prev.includes(payment.id) ? prev.filter(id => id !== payment.id) : [...prev, payment.id]) : canCheck ? () => setBillPaySelected(prev => prev.includes(payment.id) ? prev.filter(id => id !== payment.id) : [...prev, payment.id]) : undefined}
                         className={`flex items-center justify-between p-3 rounded-xl transition-all ${
+                        isTransferChecked ? 'bg-violet-50 border border-violet-200' :
                         payment.status === 'pending' ? 'bg-amber-50 border border-amber-200' :
                         payment.status === 'request-sent' ? 'bg-blue-50 border border-blue-200' :
                         isPayChecked ? 'bg-emerald-50 border border-emerald-200' : 'bg-white'
-                      } ${canCheck ? 'cursor-pointer' : (canDrag || canReassign) ? 'cursor-grab active:cursor-grabbing' : ''}`}>
+                      } ${isTransferMode || canCheck ? 'cursor-pointer' : (canDrag || canReassign) ? 'cursor-grab active:cursor-grabbing' : ''}`}>
                         <div className="flex items-center gap-3">
-                          {canCheck ? (
+                          {isTransferMode ? (
+                            <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                              isTransferChecked ? 'bg-violet-600 border-violet-600' : 'border-neutral-300'
+                            }`}>
+                              {isTransferChecked && <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" className="w-3 h-3"><polyline points="20 6 9 17 4 12"/></svg>}
+                            </div>
+                          ) : canCheck ? (
                             <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
                               isPayChecked ? 'bg-emerald-600 border-emerald-600' : 'border-neutral-300'
                             }`}>
@@ -2753,7 +3081,9 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
                           <div>
                             <div className="text-xs font-medium text-neutral-900">
                               {payment.method}
-                              {payment.status === 'pending' && <span className="ml-1 text-amber-600">(pending)</span>}
+                              {payment.method === 'Bank Transfer' && payment.confirmed === false && <span className="ml-1 text-amber-600">(awaiting)</span>}
+                              {payment.method === 'Bank Transfer' && payment.confirmed === true && <span className="ml-1 text-emerald-600">(confirmed)</span>}
+                              {payment.status === 'pending' && payment.method !== 'Bank Transfer' && <span className="ml-1 text-amber-600">(pending)</span>}
                               {payment.status === 'request-sent' && <span className="ml-1 text-blue-600">(request sent)</span>}
                             </div>
                             <div className="text-xs text-neutral-500">
@@ -2769,19 +3099,32 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
                           }`}>
                             {payment.status === 'pending' || payment.status === 'request-sent' ? '' : '+ '}EUR {payment.amount}
                           </div>
-                          {payment.status === 'pending' && (
-                            <button onClick={() => {
-                              const next = JSON.parse(JSON.stringify(ed));
-                              const p = next.payments.find(pp => pp.id === payment.id);
-                              if (p) { p.status = 'completed'; }
-                              next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Terminal payment EUR ${payment.amount} confirmed`, user: 'Sophie' });
-                              setEditingReservation(next);
-                              setToastMessage('Payment confirmed');
-                            }}
-                              className="px-2 py-0.5 text-xs font-medium bg-emerald-600 text-white rounded hover:bg-emerald-700 transition-colors">
+                          {payment.method === 'Bank Transfer' && payment.confirmed === false && (
+                            <button onClick={() => setConfirmBTPayment(payment.id)}
+                              className="px-2 py-0.5 text-[10px] font-medium bg-emerald-600 text-white rounded hover:bg-emerald-700 transition-colors" title="Confirm bank transfer received">
                               Confirm
                             </button>
                           )}
+                          {payment.status === 'pending' && payment.method !== 'Bank Transfer' && (() => {
+                            const confirmWithCard = (cardType) => {
+                              const next = JSON.parse(JSON.stringify(ed));
+                              const p = next.payments.find(pp => pp.id === payment.id);
+                              if (p) { p.status = 'completed'; p.method = cardType ? `${cardType} (Terminal)` : 'Card (Terminal)'; }
+                              next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Terminal payment EUR ${payment.amount} confirmed — ${cardType || 'Card'}`, user: 'Sophie' });
+                              setEditingReservation(next);
+                              setToastMessage(`Payment confirmed — ${cardType || 'Card'}`);
+                            };
+                            return (
+                              <div className="flex items-center gap-1">
+                                {['Bancontact', 'Maestro', 'Visa', 'MC', 'Amex'].map(ct => (
+                                  <button key={ct} onClick={() => confirmWithCard(ct === 'MC' ? 'Mastercard' : ct)}
+                                    className="px-1.5 py-0.5 text-[10px] font-medium bg-emerald-600 text-white rounded hover:bg-emerald-700 transition-colors" title={ct === 'MC' ? 'Mastercard' : ct}>
+                                    {ct}
+                                  </button>
+                                ))}
+                              </div>
+                            );
+                          })()}
                           <button onClick={() => {
                             const next = JSON.parse(JSON.stringify(ed));
                             next.payments = next.payments.filter(pp => pp.id !== payment.id);
@@ -2802,7 +3145,162 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
                   </div>
                 </div>
 
+                {/* Bank Transfer Confirm Popup */}
+                {confirmBTPayment && (() => {
+                  const btPay = ed.payments.find(p => p.id === confirmBTPayment);
+                  if (!btPay) return null;
+                  return (
+                    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setConfirmBTPayment(null)}>
+                      <div className="bg-white rounded-2xl shadow-xl w-full max-w-xs mx-4 p-5" onClick={e => e.stopPropagation()}>
+                        <h3 className="text-sm font-semibold text-neutral-900 mb-1">Confirm Bank Transfer</h3>
+                        <p className="text-xs text-neutral-500 mb-4">EUR {btPay.amount.toFixed(2)} — when was this payment received?</p>
+                        <div className="mb-4">
+                          <label className="block text-xs text-neutral-500 mb-1">Date received</label>
+                          <input type="date" id="btConfirmDate" defaultValue={new Date().toISOString().split('T')[0]}
+                            className="w-full px-3 py-2 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-300" />
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => setConfirmBTPayment(null)}
+                            className="flex-1 px-3 py-2 border border-neutral-200 rounded-lg text-xs font-medium text-neutral-600 hover:bg-neutral-50 transition-colors">
+                            Cancel
+                          </button>
+                          <button onClick={() => {
+                            const confirmDate = document.getElementById('btConfirmDate').value || new Date().toISOString().split('T')[0];
+                            const next = JSON.parse(JSON.stringify(ed));
+                            const p = next.payments.find(pp => pp.id === confirmBTPayment);
+                            if (p) {
+                              p.status = 'completed';
+                              p.confirmed = true;
+                              p.confirmedDate = confirmDate;
+                              p.note = `Bank transfer confirmed (${confirmDate})`;
+                            }
+                            next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Bank transfer EUR ${btPay.amount.toFixed(2)} confirmed — received ${confirmDate}`, user: 'Sophie' });
+                            setEditingReservation(next);
+                            setConfirmBTPayment(null);
+                            setToastMessage('Bank transfer confirmed');
+                          }}
+                            className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 transition-colors">
+                            Confirm
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Transfer Payment Panel — combined: assign to invoice OR move to reservation */}
+                {billTransferMode === 'payments' && billTransferSelected.length > 0 && (
+                  <div className="p-4 border-t border-neutral-100 space-y-4">
+                    {/* Section 1: Assign to invoice */}
+                    {(() => {
+                      const linkableInvoices = activeInvoices.filter(inv => inv.status !== 'credited' && inv.status !== 'finalized');
+                      return linkableInvoices.length > 0 ? (
+                        <div>
+                          <div className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-2">Assign to invoice</div>
+                          <div className="space-y-1.5">
+                            {linkableInvoices.map(inv => {
+                              const invPaid = ed.payments.filter(p => p.linkedInvoice === inv.number).reduce((s, p) => s + p.amount, 0);
+                              const allAlreadyLinked = billTransferSelected.every(payId => {
+                                const p = ed.payments.find(pp => pp.id === payId);
+                                return p && p.linkedInvoice === inv.number;
+                              });
+                              return allAlreadyLinked ? (
+                                <div key={inv.id}
+                                  className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-left opacity-70">
+                                  <div className="flex items-center gap-2">
+                                    <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${inv.type === 'proforma' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
+                                      {inv.type === 'proforma' ? 'PRO' : 'INV'}
+                                    </span>
+                                    <span className="text-xs font-medium text-neutral-900">{inv.number}</span>
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5 text-emerald-600"><path d="M20 6L9 17l-5-5"/></svg>
+                                    <span className="text-xs text-emerald-600">linked</span>
+                                  </div>
+                                  <span className="text-xs text-neutral-400">&euro; {invPaid.toFixed(2)} / {inv.amount.toFixed(2)}</span>
+                                </div>
+                              ) : (
+                                <button key={inv.id} onClick={() => assignPaymentsToInvoice(inv)}
+                                  className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-neutral-50 hover:bg-blue-50 hover:border-blue-200 border border-neutral-200 transition-all text-left group">
+                                  <div className="flex items-center gap-2">
+                                    <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${inv.type === 'proforma' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
+                                      {inv.type === 'proforma' ? 'PRO' : 'INV'}
+                                    </span>
+                                    <span className="text-xs font-medium text-neutral-900">{inv.number}</span>
+                                  </div>
+                                  <span className="text-xs text-neutral-400 group-hover:text-blue-600">&euro; {invPaid.toFixed(2)} / {inv.amount.toFixed(2)}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : null;
+                    })()}
+
+                    {/* Divider */}
+                    {activeInvoices.some(inv => inv.status !== 'credited' && inv.status !== 'finalized') && (
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-px bg-neutral-200" />
+                        <span className="text-xs text-neutral-400">or</span>
+                        <div className="flex-1 h-px bg-neutral-200" />
+                      </div>
+                    )}
+
+                    {/* Section 2: Move to another reservation */}
+                    {(() => {
+                      const movableCount = billTransferSelected.filter(payId => {
+                        const p = ed.payments.find(pp => pp.id === payId);
+                        return p && !p.linkedInvoice;
+                      }).length;
+                      return (
+                        <div className={movableCount === 0 ? 'opacity-50' : ''}>
+                          <div className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-2">Move to reservation</div>
+                          {movableCount === 0 ? (
+                            <div className="px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-lg text-xs text-neutral-400">
+                              All selected payments are linked to an invoice and cannot be moved.
+                            </div>
+                          ) : (
+                            <>
+                              <div className="relative">
+                                <input value={billTransferSearch} onChange={(e) => { setBillTransferSearch(e.target.value); setBillTransferTarget(null); }}
+                                  placeholder="Search booking ref or guest..."
+                                  className="w-full px-3 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent" />
+                                {billTransferTarget && (
+                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-emerald-500 absolute right-2 top-1/2 -translate-y-1/2">
+                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                                  </svg>
+                                )}
+                                {billTransferSearch.length >= 2 && !billTransferTarget && (() => {
+                                  const results = searchTransferTargets(billTransferSearch);
+                                  return results.length > 0 ? (
+                                    <div className="absolute z-20 left-0 right-0 top-full mt-1 bg-white border border-neutral-200 rounded-lg shadow-lg overflow-hidden">
+                                      {results.map(r => (
+                                        <button key={r.id} onClick={() => { setBillTransferTarget(r); setBillTransferSearch(`${r.bookingRef} — ${r.guest}`); }}
+                                          className="w-full px-3 py-2 text-left text-xs hover:bg-neutral-50 flex items-center justify-between border-b border-neutral-50 last:border-0">
+                                          <span className="font-medium text-neutral-900">{r.guest}</span>
+                                          <span className="text-neutral-400">{r.bookingRef}</span>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <div className="absolute z-20 left-0 right-0 top-full mt-1 bg-white border border-neutral-200 rounded-lg shadow-lg p-3 text-xs text-neutral-400 text-center">No reservations found</div>
+                                  );
+                                })()}
+                              </div>
+                              {billTransferTarget && (
+                                <button onClick={executeTransfer}
+                                  className="w-full mt-2 px-3 py-2 rounded-xl text-xs font-medium transition-colors bg-violet-600 text-white hover:bg-violet-700">
+                                  Move {movableCount} payment{movableCount !== 1 ? 's' : ''} to {billTransferTarget.bookingRef}
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+
                 {/* Add Payment */}
+                {billTransferMode !== 'payments' && (
                 <div className="p-4 border-t border-neutral-100">
                   <div className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-3">Add Payment</div>
                   <div className="flex gap-1 mb-3">
@@ -2957,9 +3455,9 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
                           className="w-full pl-10 pr-2 py-1.5 bg-white border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
                       </div>
                       <div className="relative">
-                        <select id="paymentMethod" defaultValue="Card (PIN)"
+                        <select id="paymentMethod" defaultValue={(hotelSettings.paymentMethods || [])[1] || 'Card (PIN)'}
                           className="px-2 py-1.5 pr-7 bg-white border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all appearance-none">
-                          {['Cash', 'Card (PIN)', 'Maestro', 'Mastercard', 'Visa', 'Bank Transfer', 'iDEAL'].map(m => (
+                          {(hotelSettings.paymentMethods || ['Cash', 'Card (PIN)', 'Maestro', 'Mastercard', 'Visa', 'Bank Transfer', 'iDEAL']).map(m => (
                             <option key={m} value={m}>{m}</option>
                           ))}
                         </select>
@@ -2967,13 +3465,25 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
                       </div>
                       <button onClick={() => {
                         const amount = parseFloat(document.getElementById('paymentAmount').value) || 0;
-                        if (amount <= 0) return;
+                        if (amount === 0) return;
                         const method = document.getElementById('paymentMethod').value;
+                        const isRefund = amount < 0;
+                        const isBankTransfer = method === 'Bank Transfer';
                         const next = JSON.parse(JSON.stringify(ed));
-                        next.payments.push({ id: Date.now(), date: new Date().toISOString().split('T')[0], amount, method, note: '', status: 'completed', linkedInvoice: null });
-                        next.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Payment recorded: EUR ${amount} (${method})`, user: 'Sophie' });
+                        next.payments.push({
+                          id: Date.now(),
+                          date: new Date().toISOString().split('T')[0],
+                          amount,
+                          method: isRefund ? `Refund (${method})` : method,
+                          note: isRefund ? 'Manual refund' : (isBankTransfer && !isRefund ? 'Awaiting bank transfer' : ''),
+                          status: (isBankTransfer && !isRefund) ? 'pending' : 'completed',
+                          confirmed: isBankTransfer && !isRefund ? false : true,
+                          confirmedDate: (isBankTransfer && !isRefund) ? null : new Date().toISOString().split('T')[0],
+                          linkedInvoice: null
+                        });
+                        next.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `${isRefund ? 'Refund' : 'Payment'} recorded: EUR ${amount} (${method})${isBankTransfer && !isRefund ? ' — awaiting confirmation' : ''}`, user: 'Sophie' });
                         setEditingReservation(next);
-                        setToastMessage(`EUR ${amount} recorded`);
+                        setToastMessage(`EUR ${amount} ${isRefund ? 'refund' : ''} recorded`);
                         document.getElementById('paymentAmount').value = '';
                       }}
                         className="px-3 py-1.5 bg-neutral-900 text-white rounded-lg text-xs font-medium hover:bg-neutral-800 transition-colors whitespace-nowrap">
@@ -2982,6 +3492,7 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + invPaymen
                     </div>
                   )}
                 </div>
+                )}
                 </div>
                 </div>
               </div>

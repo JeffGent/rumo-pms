@@ -42,8 +42,11 @@ const ReportsView = (props) => {
       const extrasTotal = (res.extras || []).reduce((sum, ex) => sum + (ex.quantity || 0) * (ex.unitPrice || 0), 0);
       const totalAmount = roomTotal + extrasTotal;
       const paidAmount = (res.payments || []).reduce((s, p) => s + p.amount, 0);
+      const paidConfirmed = (res.payments || []).filter(p => !(p.method === 'Bank Transfer' && p.confirmed === false)).reduce((s, p) => s + p.amount, 0);
+      const pendingBT = (res.payments || []).filter(p => p.method === 'Bank Transfer' && p.confirmed === false).reduce((s, p) => s + p.amount, 0);
       const outstanding = Math.max(0, totalAmount - paidAmount);
-      return { roomTotal, extrasTotal, totalAmount, paidAmount, outstanding };
+      const outstandingReal = Math.max(0, totalAmount - paidConfirmed);
+      return { roomTotal, extrasTotal, totalAmount, paidAmount, paidConfirmed, pendingBT, outstanding, outstandingReal };
     };
 
     const statusColor = (s) => {
@@ -102,7 +105,6 @@ const ReportsView = (props) => {
       const [fRoomType, setFRoomType] = useState('');
       const [fRoom, setFRoom] = useState('');
       const [fPurpose, setFPurpose] = useState('');
-      const [fPriceType, setFPriceType] = useState('');
       const [fPriceMin, setFPriceMin] = useState('');
       const [fPriceMax, setFPriceMax] = useState('');
       const [fOutstanding, setFOutstanding] = useState(false);
@@ -120,13 +122,13 @@ const ReportsView = (props) => {
 
       const savePresetsToStorage = (presets) => { localStorage.setItem('hotelReportPresets', JSON.stringify(presets)); setSavedPresets(presets); };
 
-      const getCurrentFilters = () => ({ fDateFrom, fDateTo, fStatus, fSource, fRoomType, fRoom, fPurpose, fPriceType, fPriceMin, fPriceMax, fOutstanding, fNoInvoice, fUnlinkedPayments });
+      const getCurrentFilters = () => ({ fDateFrom, fDateTo, fStatus, fSource, fRoomType, fRoom, fPurpose, fPriceMin, fPriceMax, fOutstanding, fNoInvoice, fUnlinkedPayments });
 
       const applyFilters = (f) => {
         setFDateFrom(f.fDateFrom || ''); setFDateTo(f.fDateTo || '');
         setFStatus(f.fStatus || ''); setFSource(f.fSource || '');
         setFRoomType(f.fRoomType || ''); setFRoom(f.fRoom || '');
-        setFPurpose(f.fPurpose || ''); setFPriceType(f.fPriceType || '');
+        setFPurpose(f.fPurpose || '');
         setFPriceMin(f.fPriceMin || ''); setFPriceMax(f.fPriceMax || '');
         setFOutstanding(f.fOutstanding || false); setFNoInvoice(f.fNoInvoice || false);
         setFUnlinkedPayments(f.fUnlinkedPayments || false);
@@ -157,11 +159,11 @@ const ReportsView = (props) => {
       const allRooms = [...new Set(reservations.flatMap(r => (r.rooms || []).map(rm => rm.roomNumber)).filter(Boolean))].sort((a,b) => a.localeCompare(b, undefined, {numeric: true}));
       const allPurposes = [...new Set(reservations.map(r => r.stayPurpose).filter(Boolean))].sort();
 
-      const activeFilterCount = [fDateFrom, fDateTo, fStatus, fSource, fRoomType, fRoom, fPurpose, fPriceType, fPriceMin, fPriceMax, fOutstanding, fNoInvoice, fUnlinkedPayments].filter(Boolean).length;
+      const activeFilterCount = [fDateFrom, fDateTo, fStatus, fSource, fRoomType, fRoom, fPurpose, fPriceMin, fPriceMax, fOutstanding, fNoInvoice, fUnlinkedPayments].filter(Boolean).length;
 
       const clearFilters = () => {
         setFDateFrom(''); setFDateTo(''); setFStatus(''); setFSource('');
-        setFRoomType(''); setFRoom(''); setFPurpose(''); setFPriceType('');
+        setFRoomType(''); setFRoom(''); setFPurpose('');
         setFPriceMin(''); setFPriceMax('');
         setFOutstanding(false); setFNoInvoice(false); setFUnlinkedPayments(false);
         setHasSearched(false);
@@ -177,7 +179,6 @@ const ReportsView = (props) => {
         if (fRoomType && !(r.rooms || []).some(rm => rm.roomType === fRoomType)) return false;
         if (fRoom && !(r.rooms || []).some(rm => rm.roomNumber === fRoom)) return false;
         if (fPurpose && r.stayPurpose !== fPurpose) return false;
-        if (fPriceType && !(r.rooms || []).some(rm => rm.priceType === fPriceType)) return false;
         const fin = calcResFinancials(r);
         if (fPriceMin && fin.totalAmount < parseFloat(fPriceMin)) return false;
         if (fPriceMax && fin.totalAmount > parseFloat(fPriceMax)) return false;
@@ -356,15 +357,6 @@ const ReportsView = (props) => {
                     {allPurposes.map(p => <option key={p} value={p}>{p}</option>)}
                   </select>
                 </div>
-                {/* Price type */}
-                <div>
-                  <label className="block text-[10px] text-neutral-400 uppercase tracking-wider mb-1">Price type</label>
-                  <select value={fPriceType} onChange={e => setFPriceType(e.target.value)} className={selectClass + ' w-full'}>
-                    <option value="">All types</option>
-                    <option value="fixed">Fixed price</option>
-                    <option value="per-night">Per night</option>
-                  </select>
-                </div>
                 {/* Price range */}
                 <div>
                   <label className="block text-[10px] text-neutral-400 uppercase tracking-wider mb-1">Min price</label>
@@ -374,18 +366,18 @@ const ReportsView = (props) => {
                   <label className="block text-[10px] text-neutral-400 uppercase tracking-wider mb-1">Max price</label>
                   <input type="number" value={fPriceMax} onChange={e => setFPriceMax(e.target.value)} placeholder={'€ 9999'} className={inputClass} />
                 </div>
-                {/* Checkboxes */}
+                {/* Checkboxes — auto-trigger search */}
                 <div className="flex flex-col gap-2 justify-center col-span-2">
                   <label className={checkClass}>
-                    <input type="checkbox" checked={fOutstanding} onChange={e => setFOutstanding(e.target.checked)} className="rounded border-neutral-300" />
+                    <input type="checkbox" checked={fOutstanding} onChange={e => { setFOutstanding(e.target.checked); setHasSearched(true); }} className="rounded border-neutral-300" />
                     Outstanding balance only
                   </label>
                   <label className={checkClass}>
-                    <input type="checkbox" checked={fNoInvoice} onChange={e => setFNoInvoice(e.target.checked)} className="rounded border-neutral-300" />
+                    <input type="checkbox" checked={fNoInvoice} onChange={e => { setFNoInvoice(e.target.checked); setHasSearched(true); }} className="rounded border-neutral-300" />
                     No invoice created
                   </label>
                   <label className={checkClass}>
-                    <input type="checkbox" checked={fUnlinkedPayments} onChange={e => setFUnlinkedPayments(e.target.checked)} className="rounded border-neutral-300" />
+                    <input type="checkbox" checked={fUnlinkedPayments} onChange={e => { setFUnlinkedPayments(e.target.checked); setHasSearched(true); }} className="rounded border-neutral-300" />
                     Unlinked payments
                   </label>
                 </div>
@@ -638,10 +630,11 @@ const ReportsView = (props) => {
       const debtors = reservations
         .filter(r => r.reservationStatus !== 'cancelled' && r.reservationStatus !== 'blocked')
         .map(r => ({ ...r, ...calcResFinancials(r) }))
-        .filter(r => r.outstanding > 0)
-        .sort((a, b) => b.outstanding - a.outstanding);
+        .filter(r => r.outstandingReal > 0)
+        .sort((a, b) => b.outstandingReal - a.outstandingReal);
 
-      const totalOutstanding = debtors.reduce((s, r) => s + r.outstanding, 0);
+      const totalOutstanding = debtors.reduce((s, r) => s + r.outstandingReal, 0);
+      const totalPendingBT = debtors.reduce((s, r) => s + r.pendingBT, 0);
       const totalDebtAmount = debtors.reduce((s, r) => s + r.totalAmount, 0);
 
       return (
@@ -652,6 +645,12 @@ const ReportsView = (props) => {
               <div className="text-xs text-neutral-400 uppercase tracking-wider mb-1">Total Outstanding</div>
               <div className="text-2xl font-light text-amber-600 font-serif">&euro; {totalOutstanding.toLocaleString()}</div>
             </div>
+            {totalPendingBT > 0 && (
+              <div className="bg-white border border-neutral-200 rounded-2xl p-5">
+                <div className="text-xs text-neutral-400 uppercase tracking-wider mb-1">Awaiting Bank Transfer</div>
+                <div className="text-2xl font-light text-orange-500 font-serif">&euro; {totalPendingBT.toLocaleString()}</div>
+              </div>
+            )}
             <div className="bg-white border border-neutral-200 rounded-2xl p-5">
               <div className="text-xs text-neutral-400 uppercase tracking-wider mb-1">Open Accounts</div>
               <div className="text-2xl font-light text-neutral-900 font-serif">{debtors.length}</div>
@@ -675,6 +674,7 @@ const ReportsView = (props) => {
                   <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">Check-out</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-neutral-500 uppercase tracking-wider">Total</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-neutral-500 uppercase tracking-wider">Paid</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-neutral-500 uppercase tracking-wider">Pending BT</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-neutral-500 uppercase tracking-wider">Outstanding</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">Status</th>
                 </tr>
@@ -688,19 +688,20 @@ const ReportsView = (props) => {
                     <td className="px-4 py-3 text-neutral-600">{new Date(r.checkin).toLocaleDateString('en-GB', {day:'numeric',month:'short'})}</td>
                     <td className="px-4 py-3 text-neutral-600">{new Date(r.checkout).toLocaleDateString('en-GB', {day:'numeric',month:'short'})}</td>
                     <td className="px-4 py-3 text-right">&euro; {r.totalAmount.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-right text-emerald-600">&euro; {r.paidAmount.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-right font-semibold text-amber-600">&euro; {r.outstanding.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right text-emerald-600">&euro; {r.paidConfirmed.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right text-orange-500">{r.pendingBT > 0 ? '€ ' + r.pendingBT.toLocaleString() : '—'}</td>
+                    <td className="px-4 py-3 text-right font-semibold text-amber-600">&euro; {r.outstandingReal.toLocaleString()}</td>
                     <td className="px-4 py-3"><span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColor(r.reservationStatus)}`}>{r.reservationStatus}</span></td>
                   </tr>
                 ))}
                 {debtors.length === 0 && (
-                  <tr><td colSpan="8" className="px-4 py-8 text-center text-neutral-400">No outstanding balances</td></tr>
+                  <tr><td colSpan="9" className="px-4 py-8 text-center text-neutral-400">No outstanding balances</td></tr>
                 )}
               </tbody>
               {debtors.length > 0 && (
                 <tfoot>
                   <tr className="bg-neutral-50 border-t border-neutral-200">
-                    <td colSpan="6" className="px-4 py-3 text-right text-xs font-semibold text-neutral-500 uppercase">Total Outstanding</td>
+                    <td colSpan="7" className="px-4 py-3 text-right text-xs font-semibold text-neutral-500 uppercase">Total Outstanding</td>
                     <td className="px-4 py-3 text-right font-bold text-amber-700">&euro; {totalOutstanding.toLocaleString()}</td>
                     <td></td>
                   </tr>
@@ -909,7 +910,7 @@ const ReportsView = (props) => {
           <a className="cal-nav-link" onClick={() => { setActivePage('dashboard'); setSelectedReservation(null); }}><Icons.Calendar width="18" height="18" /><span>Reservations</span></a>
           <a className="cal-nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18"><circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/><line x1="10.5" y1="7.5" x2="6.5" y2="16.5"/><line x1="13.5" y1="7.5" x2="17.5" y2="16.5"/></svg><span>Channel manager</span></a>
           <a className={`cal-nav-link${activePage === 'profiles' ? ' active' : ''}`} onClick={() => { setActivePage('profiles'); setSelectedReservation(null); }}><Icons.Users width="18" height="18" /><span>Profiles</span></a>
-          <a className="cal-nav-link"><Icons.CreditCard width="18" height="18" /><span>Payments</span></a>
+          <a className={`cal-nav-link${activePage === 'payments' ? ' active' : ''}`} onClick={() => { setActivePage('payments'); setSelectedReservation(null); }}><Icons.CreditCard width="18" height="18" /><span>Payments</span></a>
           <a className="cal-nav-link active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span>Reports</span></a>
           <a className={`cal-nav-link${activePage === 'settings' ? ' active' : ''}`} onClick={() => { setActivePage('settings'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>Settings</span></a>
         </nav>
