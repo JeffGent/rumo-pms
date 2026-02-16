@@ -8,11 +8,15 @@ let hotelSettings = (() => {
     currency: 'EUR',
     defaultRoomVat: 12,
     hotelName: 'Rumo Boutique Hotel',
-    hotelAddress: 'Keizerstraat 12, 2000 Antwerpen',
+    hotelStreet: 'Keizerstraat 12',
+    hotelZip: '2000',
+    hotelCity: 'Antwerpen',
+    hotelCountry: 'Belgium',
     hotelEmail: 'info@rumohotel.be',
     hotelPhone: '+32 3 123 45 67',
     hotelVat: 'BE0123456789',
     channex: { propertyId: null, apiKey: null },
+    autoClose: { enabled: false, receptionCloseTime: '22:00', stopSellOffset: 30, applyToChannels: 'all' },
     invoiceNumbering: {
       prefix: 'INV',
       creditPrefix: 'CN',
@@ -64,6 +68,36 @@ if (!hotelSettings.paymentMethods || !hotelSettings.paymentMethods.length) {
     saveHotelSettings();
   }
 }
+
+// Migrate hotelAddress string → split fields
+if (hotelSettings.hotelAddress && !hotelSettings.hotelStreet) {
+  const parts = hotelSettings.hotelAddress.split(',').map(s => s.trim());
+  hotelSettings.hotelStreet = parts[0] || '';
+  if (parts[1]) {
+    const m = parts[1].match(/^(\d{4,5})\s+(.*)/);
+    if (m) { hotelSettings.hotelZip = m[1]; hotelSettings.hotelCity = m[2]; }
+    else { hotelSettings.hotelCity = parts[1]; hotelSettings.hotelZip = ''; }
+  } else { hotelSettings.hotelZip = ''; hotelSettings.hotelCity = ''; }
+  hotelSettings.hotelCountry = parts[2] || 'Belgium';
+  delete hotelSettings.hotelAddress;
+  saveHotelSettings();
+}
+const getHotelAddress = () => [hotelSettings.hotelStreet, [hotelSettings.hotelZip, hotelSettings.hotelCity].filter(Boolean).join(' '), hotelSettings.hotelCountry].filter(Boolean).join(', ');
+
+// Ensure autoClose exists for existing localStorage data
+if (!hotelSettings.autoClose) {
+  hotelSettings.autoClose = { enabled: false, receptionCloseTime: '22:00', stopSellOffset: 30, applyToChannels: 'all' };
+  saveHotelSettings();
+}
+const getStopSellTime = () => {
+  const ac = hotelSettings.autoClose;
+  if (!ac?.receptionCloseTime) return null;
+  const [h, m] = ac.receptionCloseTime.split(':').map(Number);
+  const total = h * 60 + m - (ac.stopSellOffset || 30);
+  const sh = Math.floor(((total % 1440) + 1440) % 1440 / 60);
+  const sm = ((total % 1440) + 1440) % 1440 % 60;
+  return `${String(sh).padStart(2, '0')}:${String(sm).padStart(2, '0')}`;
+};
 
 // ── Sequential Invoice Number Generator ─────────────────────────────────────
 // Single ascending sequence for invoices + credit notes (Belgian law).
@@ -424,6 +458,40 @@ let smartPricingConfig = (() => {
   };
 })();
 const saveSmartPricingConfig = () => localStorage.setItem('smartPricingConfig', JSON.stringify(smartPricingConfig));
+
+// ── Role Permissions ────────────────────────────────────────────────────────
+const ROLE_PERMISSIONS = {
+  admin:        { pages: ['dashboard','calendar','housekeeping','fb','channelmanager','profiles','payments','reports','settings'], features: ['newReservation','checkInOut','invoicePayment','userManagement','hotelSettings','smartPricing'] },
+  manager:      { pages: ['dashboard','calendar','housekeeping','fb','channelmanager','profiles','payments','reports'], features: ['newReservation','checkInOut','invoicePayment','smartPricing'] },
+  receptionist: { pages: ['dashboard','calendar','housekeeping','fb','profiles','payments'], features: ['newReservation','checkInOut','invoicePayment'] },
+  housekeeping: { pages: ['housekeeping'], features: [] },
+  fb:           { pages: ['fb'], features: [] },
+};
+const canAccessPage = (role, page) => ROLE_PERMISSIONS[role]?.pages.includes(page) || false;
+const hasFeature = (role, feature) => ROLE_PERMISSIONS[role]?.features.includes(feature) || false;
+
+// ── Hotel Users ─────────────────────────────────────────────────────────────
+let hotelUsers = (() => {
+  try {
+    const stored = localStorage.getItem('hotelUsers');
+    if (stored) { const parsed = JSON.parse(stored); if (parsed.length > 0) return parsed; }
+  } catch (e) {}
+  return [
+    { id: 'usr-0', name: 'Jeffrey',          pin: '5698', role: 'admin',        department: 'Management', color: '#0f172a', active: true, createdAt: Date.now(), updatedAt: Date.now() },
+    { id: 'usr-1', name: 'Peter Claes',      pin: '0000', role: 'admin',        department: 'Management', color: '#7c3aed', active: true, createdAt: Date.now(), updatedAt: Date.now() },
+    { id: 'usr-2', name: 'Sophie Laurent',   pin: '1234', role: 'receptionist', department: 'Reception',  color: '#2563eb', active: true, createdAt: Date.now(), updatedAt: Date.now() },
+    { id: 'usr-3', name: 'Lukas Vermeer',    pin: '5678', role: 'housekeeping', department: 'Housekeeping', color: '#059669', active: true, createdAt: Date.now(), updatedAt: Date.now() },
+    { id: 'usr-4', name: 'Emma De Smet',     pin: '9012', role: 'fb',           department: 'F&B',        color: '#d97706', active: true, createdAt: Date.now(), updatedAt: Date.now() },
+    { id: 'usr-5', name: 'Nina Peeters',     pin: '3456', role: 'receptionist', department: 'Reception',  color: '#2563eb', active: true, createdAt: Date.now(), updatedAt: Date.now() },
+  ];
+})();
+const saveHotelUsers = () => { localStorage.setItem('hotelUsers', JSON.stringify(hotelUsers)); };
+
+// Ensure Jeffrey admin exists (migration for existing localStorage data)
+if (!hotelUsers.find(u => u.id === 'usr-0')) {
+  hotelUsers.unshift({ id: 'usr-0', name: 'Jeffrey', pin: '5698', role: 'admin', department: 'Management', color: '#0f172a', active: true, createdAt: Date.now(), updatedAt: Date.now() });
+  saveHotelUsers();
+}
 
 // Backward-compatibility aliases (companyRegistry / guestRegistry used elsewhere in codebase)
 const companyRegistry = companyProfiles;

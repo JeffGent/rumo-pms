@@ -1,10 +1,15 @@
 const { useState, useEffect } = React;
 
 const ModernHotelPMS = () => {
+  const [isLoggedIn, setIsLoggedIn] = useState(() => currentUser !== null);
+  const [, forceUpdate] = useState(0);
   const [time, setTime] = useState(new Date());
   // Start met gisteren zodat vandaag op positie 2 staat in kalender view
   const [selectedDate, setSelectedDate] = useState(() => new Date());
-  const [activePage, setActivePage] = useState('dashboard');
+  const [activePage, setActivePage] = useState(() => {
+    if (currentUser) return ROLE_PERMISSIONS[currentUser.role]?.pages[0] || 'dashboard';
+    return 'dashboard';
+  });
   // Profile state lifted to App level so it survives ProfilesView re-mounts
   const [profileSelectedProfile, setProfileSelectedProfile] = useState(null);
   const [profileEditingProfile, setProfileEditingProfile] = useState(null);
@@ -73,6 +78,32 @@ const ModernHotelPMS = () => {
   const focusValRef = React.useRef('');
   const addRoomRef = React.useRef(null);
   const dragPaymentRef = React.useRef(null);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+
+  // ── Login / Logout handlers ─────────────────────────────────────────
+  const handleLogin = (user) => {
+    setIsLoggedIn(true);
+    const defaultPage = ROLE_PERMISSIONS[user.role]?.pages[0] || 'dashboard';
+    setActivePage(defaultPage);
+    setSelectedReservation(null);
+  };
+
+  const handleLogout = () => {
+    clearCurrentUser();
+    setIsLoggedIn(false);
+    setActivePage('dashboard');
+    setSelectedReservation(null);
+    setUserMenuOpen(false);
+  };
+
+  // Redirect if current page is not allowed for role
+  useEffect(() => {
+    if (currentUser && !canAccessPage(currentUser.role, activePage)) {
+      const defaultPage = ROLE_PERMISSIONS[currentUser.role]?.pages[0] || 'dashboard';
+      setActivePage(defaultPage);
+    }
+  }, [activePage]);
+
   const [housekeepingStatus, setHousekeepingStatus] = useState(() => {
     try {
       const stored = localStorage.getItem('housekeepingStatus');
@@ -302,9 +333,9 @@ const ModernHotelPMS = () => {
         // Activity log
         if (!reservations[idx].activityLog) reservations[idx].activityLog = [];
         if (isDeparting) {
-          reservations[idx].activityLog.push({ id: Date.now(), timestamp: Date.now(), action: newValue ? 'Checked out' : 'Check-out undone', user: 'Sophie' });
+          reservations[idx].activityLog.push({ id: Date.now(), timestamp: Date.now(), action: newValue ? 'Checked out' : 'Check-out undone', user: currentUser?.name || 'System' });
         } else {
-          reservations[idx].activityLog.push({ id: Date.now(), timestamp: Date.now(), action: newValue ? `Checked in at ${newValue}` : 'Check-in undone', user: 'Sophie' });
+          reservations[idx].activityLog.push({ id: Date.now(), timestamp: Date.now(), action: newValue ? `Checked in at ${newValue}` : 'Check-in undone', user: currentUser?.name || 'System' });
         }
         saveReservationSingle(reservations[idx]);
       }
@@ -484,50 +515,50 @@ const ModernHotelPMS = () => {
       const mod = isMac ? e.ctrlKey : e.altKey;
       if (!mod) return;
 
-      // Mod+N: New Reservation
-      if (e.key === 'n') {
+      // Mod+N: New Reservation (role-gated)
+      if (e.key === 'n' && hasFeature(currentUser?.role, 'newReservation')) {
         e.preventDefault();
         setNewReservationOpen(true);
         return;
       }
 
-      // Mod+F: Invoice
-      if (e.key === 'f') {
+      // Mod+F: Invoice (role-gated)
+      if (e.key === 'f' && hasFeature(currentUser?.role, 'invoicePayment')) {
         e.preventDefault();
         setInvoiceOpen(true);
         return;
       }
 
-      // Mod+1: Dashboard
-      if (e.key === '1') {
+      // Mod+1: Dashboard (role-gated)
+      if (e.key === '1' && canAccessPage(currentUser?.role, 'dashboard')) {
         e.preventDefault();
         setActivePage('dashboard'); setSelectedReservation(null);
         return;
       }
 
-      // Mod+2: Calendar
-      if (e.key === '2') {
+      // Mod+2: Calendar (role-gated)
+      if (e.key === '2' && canAccessPage(currentUser?.role, 'calendar')) {
         e.preventDefault();
         setActivePage('calendar'); setSelectedReservation(null);
         return;
       }
 
-      // Mod+3: Housekeeping
-      if (e.key === '3') {
+      // Mod+3: Housekeeping (role-gated)
+      if (e.key === '3' && canAccessPage(currentUser?.role, 'housekeeping')) {
         e.preventDefault();
         setActivePage('housekeeping'); setSelectedReservation(null);
         return;
       }
 
-      // Mod+4: F&B
-      if (e.key === '4') {
+      // Mod+4: F&B (role-gated)
+      if (e.key === '4' && canAccessPage(currentUser?.role, 'fb')) {
         e.preventDefault();
         setActivePage('fb'); setSelectedReservation(null);
         return;
       }
 
-      // Mod+5: Reports
-      if (e.key === '5') {
+      // Mod+5: Reports (role-gated)
+      if (e.key === '5' && canAccessPage(currentUser?.role, 'reports')) {
         e.preventDefault();
         setActivePage('reports'); setSelectedReservation(null);
         return;
@@ -564,17 +595,18 @@ const ModernHotelPMS = () => {
 
   const totalRooms = getAllRooms().length;
 
-  // Navigation Tabs
+  // Navigation Tabs — filtered by role
+  const fbIcon = (props) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/>
+    </svg>
+  );
   const navTabs = [
     { id: 'dashboard', label: 'Dashboard', icon: Icons.Home },
     { id: 'calendar', label: 'Calendar', icon: Icons.Calendar },
     { id: 'housekeeping', label: 'Housekeeping', icon: Icons.Sparkles },
-    { id: 'fb', label: 'F&B', icon: (props) => (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-        <path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/>
-      </svg>
-    )},
-  ];
+    { id: 'fb', label: 'F&B', icon: fbIcon },
+  ].filter(tab => canAccessPage(currentUser?.role, tab.id));
 
   // ── View Props bundle ────────────────────────────────────────────────
   const vp = {
@@ -604,9 +636,14 @@ const ModernHotelPMS = () => {
     housekeepingStatus, setHousekeepingStatus, totalRooms,
     messageInputRef, messagesEndRef, searchInputRef, focusValRef, addRoomRef, dragPaymentRef,
     showCheckoutWarning, toggleCheckInOut, setTime,
+    currentUser, handleLogout, userMenuOpen, setUserMenuOpen,
   };
 
   // Main render with view switching
+  if (!isLoggedIn) {
+    return <LoginScreen onLogin={handleLogin} />;
+  }
+
   return (
     <div className="min-h-screen bg-neutral-50">
       {/* Top Navigation Bar with Tabs */}
@@ -657,14 +694,16 @@ const ModernHotelPMS = () => {
             {/* Right Side - Stats & Actions */}
             <div className="flex items-center gap-3 md:gap-6">
               {/* New Reservation Button */}
-              <button data-tour="new-res-btn" onClick={() => setNewReservationOpen(true)}
-                className="hidden md:flex items-center gap-2 px-4 py-2 bg-neutral-900 text-white rounded-xl font-medium hover:bg-neutral-800 transition-colors duration-200 shadow-lg">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M5 12h14"/>
-                  <path d="M12 5v14"/>
-                </svg>
-                New
-              </button>
+              {hasFeature(currentUser?.role, 'newReservation') && (
+                <button data-tour="new-res-btn" onClick={() => setNewReservationOpen(true)}
+                  className="hidden md:flex items-center gap-2 px-4 py-2 bg-neutral-900 text-white rounded-xl font-medium hover:bg-neutral-800 transition-colors duration-200 shadow-lg">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M5 12h14"/>
+                    <path d="M12 5v14"/>
+                  </svg>
+                  New
+                </button>
+              )}
 
               {/* Search button (opens Ctrl+K modal) */}
               <button data-tour="search-btn" onClick={() => { setSearchOpen(true); setSearchQuery(''); }}
@@ -672,13 +711,6 @@ const ModernHotelPMS = () => {
                 <Icons.Search className="w-4 h-4 flex-shrink-0" />
                 <span className="hidden md:inline flex-1 text-left">Search...</span>
                 <kbd className="hidden md:inline px-1.5 py-0.5 bg-white rounded-md text-[11px] font-medium text-neutral-400 border border-neutral-200">Ctrl+K</kbd>
-              </button>
-
-              {/* Tour help button */}
-              <button onClick={() => setTourActive(activePage)} className="p-2 hover:bg-neutral-100 rounded-xl transition-colors duration-200" title="Start guided tour">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 text-neutral-600">
-                  <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-                </svg>
               </button>
 
               {/* Messages */}
@@ -696,6 +728,7 @@ const ModernHotelPMS = () => {
                   ) : null;
                 })()}
               </button>
+
             </div>
           </div>
         </div>
@@ -722,13 +755,13 @@ const ModernHotelPMS = () => {
                 { id: 'dashboard', label: 'Reservations', icon: Icons.Calendar },
                 { id: 'calendar', label: 'Calendar', icon: Icons.Calendar },
                 { id: 'housekeeping', label: 'Housekeeping', icon: Icons.Sparkles },
-                { id: 'fb', label: 'F&B', icon: navTabs[3].icon },
+                { id: 'fb', label: 'F&B', icon: fbIcon },
                 { id: 'channelmanager', label: 'Channel Manager', icon: (p) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/><line x1="10.5" y1="7.5" x2="6.5" y2="16.5"/><line x1="13.5" y1="7.5" x2="17.5" y2="16.5"/></svg> },
                 { id: 'profiles', label: 'Profiles', icon: Icons.Users },
                 { id: 'payments', label: 'Payments', icon: Icons.CreditCard },
                 { id: 'reports', label: 'Reports', icon: (p) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...p}><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> },
                 { id: 'settings', label: 'Settings', icon: (p) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...p}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> },
-              ].map(tab => {
+              ].filter(tab => canAccessPage(currentUser?.role, tab.id)).map(tab => {
                 const IconComp = tab.icon;
                 return (
                   <button key={tab.id} onClick={() => { setActivePage(tab.id); setSelectedReservation(null); setMobileMenuOpen(false); }}
@@ -741,7 +774,16 @@ const ModernHotelPMS = () => {
                 );
               })}
             </nav>
-            <div className="p-4 border-t border-neutral-100 text-xs text-neutral-400">Rumo &copy; All Rights Reserved</div>
+            <div className="p-4 border-t border-neutral-100">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[9px] font-bold" style={{ backgroundColor: currentUser?.color }}>{currentUser?.name?.split(' ').map(n => n[0]).join('')}</div>
+                  <span className="text-xs font-medium text-neutral-700">{currentUser?.name}</span>
+                </div>
+                <button onClick={() => { setMobileMenuOpen(false); handleLogout(); }} className="text-xs text-red-500 hover:text-red-700">Sign out</button>
+              </div>
+              <div className="text-[10px] text-neutral-300">Rumo &copy; All Rights Reserved</div>
+            </div>
           </div>
         </div>
       )}
@@ -752,9 +794,9 @@ const ModernHotelPMS = () => {
           {[
             { id: 'dashboard', label: 'Dashboard', icon: Icons.Home },
             { id: 'housekeeping', label: 'Housekeeping', icon: Icons.Sparkles },
-            { id: 'fb', label: 'F&B', icon: navTabs[3].icon },
+            { id: 'fb', label: 'F&B', icon: fbIcon },
             { id: 'messages', label: 'Messages', icon: Icons.Bell },
-          ].map(tab => {
+          ].filter(tab => tab.id === 'messages' || canAccessPage(currentUser?.role, tab.id)).map(tab => {
             const IconComponent = tab.icon;
             const isActive = tab.id === 'messages' ? messagesOpen : activePage === tab.id;
             return (
@@ -786,6 +828,15 @@ const ModernHotelPMS = () => {
           })}
         </div>
       </div>
+
+      {/* Tour help button — floating subtle in top-right of content */}
+      <button onClick={() => setTourActive(activePage)}
+        className="hidden md:flex fixed top-[80px] right-4 z-40 p-1.5 bg-white/80 hover:bg-neutral-100 rounded-lg border border-neutral-200/60 shadow-sm transition-all duration-200 opacity-30 hover:opacity-100"
+        title="Start guided tour">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-neutral-400">
+          <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+      </button>
 
       {/* Main Content - View Switching */}
       <div className="pb-16 md:pb-0">

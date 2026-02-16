@@ -89,7 +89,7 @@ const ReservationDetailView = (props) => {
     });
     if (linked > 0) {
       const total = billTransferSelected.reduce((s, payId) => { const p = next.payments.find(pp => pp.id === payId); return s + (p ? p.amount : 0); }, 0);
-      next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `${linked} payment(s) (EUR ${total.toFixed(2)}) linked to ${inv.number}`, user: 'Sophie' });
+      next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `${linked} payment(s) (EUR ${total.toFixed(2)}) linked to ${inv.number}`, user: currentUser?.name || 'System' });
       setEditingReservation(next);
       setToastMessage(`${linked} payment(s) linked to ${inv.number}`);
     }
@@ -117,9 +117,9 @@ const ReservationDetailView = (props) => {
       });
       const names = extrasToMove.map(ex => ex.name).join(', ');
       const total = extrasToMove.reduce((s, ex) => s + (ex.quantity || 0) * (ex.unitPrice || 0), 0);
-      next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Transferred ${extrasToMove.length} item(s) to ${target.bookingRef}: ${names} (EUR ${total.toFixed(2)})`, user: 'Sophie' });
+      next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Transferred ${extrasToMove.length} item(s) to ${target.bookingRef}: ${names} (EUR ${total.toFixed(2)})`, user: currentUser?.name || 'System' });
       target.activityLog = target.activityLog || [];
-      target.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Received ${extrasToMove.length} item(s) from ${next.bookingRef}: ${names} (EUR ${total.toFixed(2)})`, user: 'Sophie' });
+      target.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Received ${extrasToMove.length} item(s) from ${next.bookingRef}: ${names} (EUR ${total.toFixed(2)})`, user: currentUser?.name || 'System' });
       setToastMessage(`${extrasToMove.length} item(s) transferred to ${target.bookingRef}`);
 
     } else if (billTransferMode === 'payments') {
@@ -138,9 +138,9 @@ const ReservationDetailView = (props) => {
         target.payments.push({ ...p, id: Date.now() + Math.floor(Math.random() * 10000) });
       });
       const total = paymentsToMove.reduce((s, p) => s + p.amount, 0);
-      next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Transferred ${paymentsToMove.length} payment(s) to ${target.bookingRef} (EUR ${total.toFixed(2)})`, user: 'Sophie' });
+      next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Transferred ${paymentsToMove.length} payment(s) to ${target.bookingRef} (EUR ${total.toFixed(2)})`, user: currentUser?.name || 'System' });
       target.activityLog = target.activityLog || [];
-      target.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Received ${paymentsToMove.length} payment(s) from ${next.bookingRef} (EUR ${total.toFixed(2)})`, user: 'Sophie' });
+      target.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Received ${paymentsToMove.length} payment(s) from ${next.bookingRef} (EUR ${total.toFixed(2)})`, user: currentUser?.name || 'System' });
       setToastMessage(`${paymentsToMove.length} payment(s) transferred to ${target.bookingRef}`);
     }
 
@@ -169,7 +169,7 @@ const ReservationDetailView = (props) => {
     }
     obj[keys[keys.length - 1]] = value;
     if (logMsg) {
-      next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: logMsg, user: 'Sophie' });
+      next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: logMsg, user: currentUser?.name || 'System' });
     }
     setEditingReservation(next);
   };
@@ -202,7 +202,7 @@ const ReservationDetailView = (props) => {
     next.reservationStatus = newStatus;
     // Push reservation status down to all rooms
     (next.rooms || []).forEach(r => { r.status = newStatus; });
-    next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: actionLabel, user: 'Sophie' });
+    next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: actionLabel, user: currentUser?.name || 'System' });
     setEditingReservation(next);
     setShowActionMenu(false);
     if (newStatus === 'checked-out') showCheckoutWarning(next);
@@ -222,7 +222,7 @@ const ReservationDetailView = (props) => {
     }
     if (oldStatus !== newStatus) {
       const label = { confirmed: 'Confirmed', option: 'Option', 'checked-in': 'Checked-in', 'checked-out': 'Checked-out', 'no-show': 'No-show', cancelled: 'Cancelled', blocked: 'Blocked' };
-      next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Room ${next.rooms[roomIndex].roomNumber}: ${label[oldStatus] || oldStatus} → ${label[newStatus] || newStatus}`, user: 'Sophie' });
+      next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Room ${next.rooms[roomIndex].roomNumber}: ${label[oldStatus] || oldStatus} → ${label[newStatus] || newStatus}`, user: currentUser?.name || 'System' });
     }
     setEditingReservation(next);
     if (newStatus === 'checked-out') showCheckoutWarning(next);
@@ -230,7 +230,7 @@ const ReservationDetailView = (props) => {
 
   const addToActivityLog = (action) => {
     const next = JSON.parse(JSON.stringify(ed));
-    next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action, user: 'Sophie' });
+    next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action, user: currentUser?.name || 'System' });
     setEditingReservation(next);
   };
 
@@ -256,12 +256,37 @@ const ReservationDetailView = (props) => {
         </button>
         <nav className="cal-nav">
           <a className="cal-nav-link"><Icons.Calendar width="18" height="18" /><span>Reservations</span></a>
-          <a className={`cal-nav-link${activePage === 'channelmanager' ? ' active' : ''}`} onClick={() => { setActivePage('channelmanager'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18"><circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/><line x1="10.5" y1="7.5" x2="6.5" y2="16.5"/><line x1="13.5" y1="7.5" x2="17.5" y2="16.5"/></svg><span>Channel manager</span></a>
-          <a className={`cal-nav-link${activePage === 'profiles' ? ' active' : ''}`} onClick={() => { setActivePage('profiles'); setSelectedReservation(null); }}><Icons.Users width="18" height="18" /><span>Profiles</span></a>
-          <a className={`cal-nav-link${activePage === 'payments' ? ' active' : ''}`} onClick={() => { setActivePage('payments'); setSelectedReservation(null); }}><Icons.CreditCard width="18" height="18" /><span>Payments</span></a>
-          <a className={`cal-nav-link${activePage === 'reports' ? ' active' : ''}`} onClick={() => { setActivePage('reports'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span>Reports</span></a>
-          <a className={`cal-nav-link${activePage === 'settings' ? ' active' : ''}`} onClick={() => { setActivePage('settings'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>Settings</span></a>
+          {canAccessPage(currentUser?.role, 'channelmanager') && <a className={`cal-nav-link${activePage === 'channelmanager' ? ' active' : ''}`} onClick={() => { setActivePage('channelmanager'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18"><circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/><line x1="10.5" y1="7.5" x2="6.5" y2="16.5"/><line x1="13.5" y1="7.5" x2="17.5" y2="16.5"/></svg><span>Channel manager</span></a>}
+          {canAccessPage(currentUser?.role, 'profiles') && <a className={`cal-nav-link${activePage === 'profiles' ? ' active' : ''}`} onClick={() => { setActivePage('profiles'); setSelectedReservation(null); }}><Icons.Users width="18" height="18" /><span>Profiles</span></a>}
+          {canAccessPage(currentUser?.role, 'payments') && <a className={`cal-nav-link${activePage === 'payments' ? ' active' : ''}`} onClick={() => { setActivePage('payments'); setSelectedReservation(null); }}><Icons.CreditCard width="18" height="18" /><span>Payments</span></a>}
+          {canAccessPage(currentUser?.role, 'reports') && <a className={`cal-nav-link${activePage === 'reports' ? ' active' : ''}`} onClick={() => { setActivePage('reports'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span>Reports</span></a>}
+          {canAccessPage(currentUser?.role, 'settings') && <a className={`cal-nav-link${activePage === 'settings' ? ' active' : ''}`} onClick={() => { setActivePage('settings'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>Settings</span></a>}
         </nav>
+        <div className="cal-nav-user">
+          <div className="relative">
+            <button onClick={() => props.setUserMenuOpen(prev => !prev)}
+              className={`flex items-center gap-2 w-full px-2 py-1.5 hover:bg-neutral-100 rounded-xl transition-colors ${sidebarCollapsed ? 'justify-center' : ''}`}>
+              <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0"
+                style={{ backgroundColor: currentUser?.color || '#6b7280' }}>
+                {currentUser?.name?.split(' ').map(n => n[0]).join('') || '?'}
+              </div>
+              {!sidebarCollapsed && <span className="text-xs text-neutral-600 truncate">{currentUser?.name?.split(' ')[0]}</span>}
+            </button>
+            {props.userMenuOpen && (<>
+              <div className="fixed inset-0 z-[49]" onClick={() => props.setUserMenuOpen(false)} />
+              <div className="absolute left-0 bottom-full mb-1 w-48 bg-white rounded-xl shadow-lg border border-neutral-200 py-1 z-[50]">
+                <div className="px-3 py-2 border-b border-neutral-100">
+                  <div className="text-sm font-medium text-neutral-900">{currentUser?.name}</div>
+                  <div className="text-[11px] text-neutral-400 capitalize">{currentUser?.role}</div>
+                </div>
+                <button onClick={props.handleLogout} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                  Sign out
+                </button>
+              </div>
+            </>)}
+          </div>
+        </div>
         <div className="cal-nav-footer">{!sidebarCollapsed && (<>Rumo &copy;<br/>All Rights Reserved</>)}</div>
       </aside>
       <div className="p-4 md:p-8 overflow-y-auto">
@@ -809,7 +834,7 @@ const ReservationDetailView = (props) => {
                       const next = JSON.parse(JSON.stringify(ed));
                       next._ccRequestSent = true;
                       next._ccRequestDate = Date.now();
-                      next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Credit card request sent to ${bookerEmail}`, user: 'Sophie' });
+                      next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Credit card request sent to ${bookerEmail}`, user: currentUser?.name || 'System' });
                       setEditingReservation(next);
                       setToastMessage(`Credit card request sent to ${bookerEmail}`);
                       // Simulate the guest responding after 8 seconds
@@ -915,7 +940,7 @@ const ReservationDetailView = (props) => {
                             if (!next.reminders) next.reminders = [];
                             next.reminders.push({ id: Date.now(), message: msg, dueDate: isoLocal, createdAt: Date.now(), fired: false, toastShown: false });
                             next._showReminderForm = false;
-                            next.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Reminder set: "${msg}" (${opt.label})`, user: 'Sophie' });
+                            next.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Reminder set: "${msg}" (${opt.label})`, user: currentUser?.name || 'System' });
                             setEditingReservation(next);
                             setToastMessage('Reminder added');
                           }}
@@ -934,7 +959,7 @@ const ReservationDetailView = (props) => {
                           if (!next.reminders) next.reminders = [];
                           next.reminders.push({ id: Date.now(), message: msg, dueDate: due, createdAt: Date.now(), fired: false, toastShown: false });
                           next._showReminderForm = false;
-                          next.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Reminder set: "${msg}"`, user: 'Sophie' });
+                          next.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Reminder set: "${msg}"`, user: currentUser?.name || 'System' });
                           setEditingReservation(next);
                           setToastMessage('Reminder added');
                         }}
@@ -968,7 +993,7 @@ const ReservationDetailView = (props) => {
                                 const next = JSON.parse(JSON.stringify(ed));
                                 const r = next.reminders.find(r => r.id === rem.id);
                                 if (r) r.fired = true;
-                                next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Reminder acknowledged: "${rem.message}"`, user: 'Sophie' });
+                                next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Reminder acknowledged: "${rem.message}"`, user: currentUser?.name || 'System' });
                                 setEditingReservation(next);
                               }}
                                 title="Acknowledge"
@@ -1084,7 +1109,7 @@ const ReservationDetailView = (props) => {
                                     const oldRoom = next.rooms[ri].roomNumber;
                                     next.rooms[ri].roomNumber = newRoom;
                                     next.rooms[ri].roomType = getRoomTypeName(newRoom);
-                                    next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Room changed: ${oldRoom} → ${newRoom}`, user: 'Sophie' });
+                                    next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Room changed: ${oldRoom} → ${newRoom}`, user: currentUser?.name || 'System' });
                                     setEditingReservation(next);
                                     setToastMessage(`Room changed to ${newRoom}`);
                                   }}
@@ -1178,7 +1203,7 @@ const ReservationDetailView = (props) => {
                                     if (isNaN(val)) return;
                                     const next = JSON.parse(JSON.stringify(ed));
                                     next.rooms.forEach(r => { r.fixedPrice = val; r.priceType = 'fixed'; });
-                                    next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `All rooms price set to €${val.toFixed(2)}`, user: 'Sophie' });
+                                    next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `All rooms price set to €${val.toFixed(2)}`, user: currentUser?.name || 'System' });
                                     setEditingReservation(next);
                                     setToastMessage(`All ${next.rooms.length} rooms set to €${val.toFixed(2)}`);
                                     e.target.value = '';
@@ -1190,7 +1215,7 @@ const ReservationDetailView = (props) => {
                                   if (isNaN(val)) return;
                                   const next = JSON.parse(JSON.stringify(ed));
                                   next.rooms.forEach(r => { r.fixedPrice = val; r.priceType = 'fixed'; });
-                                  next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `All rooms price set to €${val.toFixed(2)}`, user: 'Sophie' });
+                                  next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `All rooms price set to €${val.toFixed(2)}`, user: currentUser?.name || 'System' });
                                   setEditingReservation(next);
                                   setToastMessage(`All ${next.rooms.length} rooms set to €${val.toFixed(2)}`);
                                   document.getElementById('quickEditBulkPrice').value = '';
@@ -1250,7 +1275,7 @@ const ReservationDetailView = (props) => {
                           const wasLocked = next.rooms[ri].roomLocked;
                           next.rooms[ri].roomLocked = !wasLocked;
                           if (wasLocked) next.rooms[ri].roomLockedReason = '';
-                          next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Room ${room.roomNumber} ${wasLocked ? 'unlocked' : 'locked'}${!wasLocked ? '' : ''}`, user: 'Sophie' });
+                          next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Room ${room.roomNumber} ${wasLocked ? 'unlocked' : 'locked'}${!wasLocked ? '' : ''}`, user: currentUser?.name || 'System' });
                           setEditingReservation(next);
                           setToastMessage(`Room ${room.roomNumber} ${wasLocked ? 'unlocked' : 'locked'}`);
                         }}
@@ -1302,7 +1327,7 @@ const ReservationDetailView = (props) => {
                                     const next = JSON.parse(JSON.stringify(ed));
                                     const oldRoom = next.rooms[ri].roomNumber;
                                     next.rooms[ri].roomNumber = rm;
-                                    next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Room changed: ${oldRoom} → ${rm}`, user: 'Sophie' });
+                                    next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Room changed: ${oldRoom} → ${rm}`, user: currentUser?.name || 'System' });
                                     setEditingReservation(next);
                                     setChangeRoomTarget(null);
                                     setToastMessage(`Room changed to ${rm}`);
@@ -1370,7 +1395,7 @@ const ReservationDetailView = (props) => {
                                               next.checkin = new Date(Math.min(...dates.map(d => d.ci))).toISOString();
                                               next.checkout = new Date(Math.max(...dates.map(d => d.co))).toISOString();
                                             }
-                                            next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Room ${movedRoom.roomNumber} moved to ${target.bookingRef}`, user: 'Sophie' });
+                                            next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Room ${movedRoom.roomNumber} moved to ${target.bookingRef}`, user: currentUser?.name || 'System' });
                                             setEditingReservation(next);
                                             // Add room to target reservation (module-level)
                                             const targetRes = reservations.find(r => r.id === target.id);
@@ -1382,7 +1407,7 @@ const ReservationDetailView = (props) => {
                                               targetRes.checkin = new Date(Math.min(...targetRes.rooms.map(r => new Date(r.checkin))));
                                               targetRes.checkout = new Date(Math.max(...targetRes.rooms.map(r => new Date(r.checkout))));
                                               targetRes.activityLog = targetRes.activityLog || [];
-                                              targetRes.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Room ${movedRoom.roomNumber} received from ${ed.bookingRef}`, user: 'Sophie' });
+                                              targetRes.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Room ${movedRoom.roomNumber} received from ${ed.bookingRef}`, user: currentUser?.name || 'System' });
                                               try { localStorage.setItem('hotelReservations', JSON.stringify(reservations)); } catch (e) {}
                                             }
                                             setChangeRoomTarget(null);
@@ -1603,7 +1628,7 @@ const ReservationDetailView = (props) => {
                             const next = JSON.parse(JSON.stringify(ed));
                             if (!next.rooms[ri].guests) next.rooms[ri].guests = [];
                             next.rooms[ri].guests.push({ firstName: '', lastName: '', email: '', phone: '', nationality: 'NL', idType: '', idNumber: '' });
-                            next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Room ${room.roomNumber}: guest ${next.rooms[ri].guests.length} added`, user: 'Sophie' });
+                            next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Room ${room.roomNumber}: guest ${next.rooms[ri].guests.length} added`, user: currentUser?.name || 'System' });
                             setEditingReservation(next);
                             setActiveGuestTab(prev => ({ ...prev, [ri]: next.rooms[ri].guests.length - 1 }));
                           }} className="w-7 h-7 rounded-lg border border-dashed border-neutral-300 hover:border-neutral-400 flex items-center justify-center text-neutral-400 hover:text-neutral-600 transition-colors">
@@ -1645,7 +1670,7 @@ const ReservationDetailView = (props) => {
                                   const removed = next.rooms[ri].guests[gi];
                                   const gName = `${removed.firstName || ''} ${removed.lastName || ''}`.trim() || `Guest ${gi+1}`;
                                   next.rooms[ri].guests.splice(gi, 1);
-                                  next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Room ${room.roomNumber}: guest removed (${gName})`, user: 'Sophie' });
+                                  next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Room ${room.roomNumber}: guest removed (${gName})`, user: currentUser?.name || 'System' });
                                   setEditingReservation(next);
                                   setActiveGuestTab(prev => ({ ...prev, [ri]: Math.max(0, gi - 1) }));
                                 }} className="text-xs text-red-400 hover:text-red-600 transition-colors">Remove</button>
@@ -1841,7 +1866,7 @@ const ReservationDetailView = (props) => {
                               const next = JSON.parse(JSON.stringify(ed));
                               const removed = next.extras[ei];
                               next.extras.splice(ei, 1);
-                              next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Extra removed: ${removed.name}`, user: 'Sophie' });
+                              next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Extra removed: ${removed.name}`, user: currentUser?.name || 'System' });
                               setEditingReservation(next);
                             }} className="w-5 h-5 rounded hover:bg-red-50 flex items-center justify-center transition-colors">
                               <Icons.X className="w-3 h-3 text-neutral-400 hover:text-red-500" />
@@ -1945,7 +1970,7 @@ const ReservationDetailView = (props) => {
                               vatRate: cat ? cat.defaultVat : (vatRates[0]?.rate ?? 6),
                               unitPrice: cat ? getExtraPrice(cat, ci) : 0
                             });
-                            next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Extra added: ${extraName} x${qty}`, user: 'Sophie' });
+                            next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Extra added: ${extraName} x${qty}`, user: currentUser?.name || 'System' });
                             setEditingReservation(next);
                             e.target.value = '';
                             if (qtyEl) qtyEl.value = '1';
@@ -2042,7 +2067,7 @@ const ReservationDetailView = (props) => {
                             housekeeping: 'clean', housekeepingNote: '', optionExpiry: null,
                             roomLocked: false, roomLockedReason: ''
                           });
-                          next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Room ${rm} added (${addRoomDates.checkin} → ${addRoomDates.checkout})`, user: 'Sophie' });
+                          next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Room ${rm} added (${addRoomDates.checkin} → ${addRoomDates.checkout})`, user: currentUser?.name || 'System' });
                           setEditingReservation(next);
                           setToastMessage(`Room ${rm} added`);
                           setTimeout(() => { addRoomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, 50);
@@ -2118,7 +2143,7 @@ td:last-child { text-align: right; font-weight: 500; }
 <div class="header">
 <div>
   <div class="hotel">${(hotelSettings.hotelName || 'Hotel').split(' ')[0].toUpperCase()}</div>
-  <div class="hotel-details">${hotelSettings.hotelName || ''}<br>${hotelSettings.hotelAddress || ''}<br>BTW ${hotelSettings.hotelVat || ''}<br>${hotelSettings.hotelEmail || ''} · ${hotelSettings.hotelPhone || ''}</div>
+  <div class="hotel-details">${hotelSettings.hotelName || ''}<br>${getHotelAddress()}<br>BTW ${hotelSettings.hotelVat || ''}<br>${hotelSettings.hotelEmail || ''} · ${hotelSettings.hotelPhone || ''}</div>
 </div>
 <div class="invoice-title">
   <h2>${isCredit ? 'CREDIT NOTE' : inv.type === 'proforma' ? 'PROFORMA' : 'INVOICE'}</h2>
@@ -2159,7 +2184,7 @@ ${Object.entries(vatGroups).map(([rate, g]) => '<div class="row vat"><span>Net (
 </div>
 ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + confirmedPayments.map(p => '<div class="pay-row"><span class="pay-method">' + p.method + ' · ' + p.date + '</span><span>' + cur + ' ' + p.amount.toFixed(2) + '</span></div>').join('') + (pendingBTPayments.length > 0 ? pendingBTPayments.map(p => '<div class="pay-row" style="color:#b45309;"><span class="pay-method">Expected payment: Bank Transfer</span><span>' + cur + ' ' + p.amount.toFixed(2) + '</span></div>').join('') : '') + (invPaid + pendingBTTotal < inv.amount && !isCredit ? '<div class="pay-row due"><span>Amount due</span><span>' + cur + ' ' + (inv.amount - invPaid - pendingBTTotal).toFixed(2) + '</span></div>' : '') + (invPaid < inv.amount && pendingBTTotal > 0 && !isCredit ? '<div class="pay-row due"><span>Balance (excl. expected)</span><span>' + cur + ' ' + (inv.amount - invPaid).toFixed(2) + '</span></div>' : '') + '</div>' : ''}
 <div class="ref">Booking ref: ${ed.bookingRef || '—'}${ed.otaRef ? ' · OTA ref: ' + ed.otaRef : ''}</div>
-<div class="footer">${hotelSettings.hotelName || ''} · ${hotelSettings.hotelAddress || ''} · ${hotelSettings.hotelVat || ''}</div>
+<div class="footer">${hotelSettings.hotelName || ''} · ${getHotelAddress()} · ${hotelSettings.hotelVat || ''}</div>
 </body></html>`;
               let iframe = document.getElementById('_printFrame');
               if (!iframe) { iframe = document.createElement('iframe'); iframe.id = '_printFrame'; iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:0;height:0;border:none;'; document.body.appendChild(iframe); }
@@ -2247,12 +2272,12 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + confirmed
               }
               const invoiceRef = (next.billingRecipient?.reference || '').trim();
               next.invoices.push({ id: Date.now(), number: invNum, date: new Date().toISOString().split('T')[0], amount: selectedTotal, type, status: 'created', items: invoiceItems, linkedPayments: linkedPays, recipient, reference: invoiceRef || '' });
-              next.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `${type === 'proforma' ? 'Proforma' : 'Invoice'} ${invNum} created (EUR ${selectedTotal}, ${selectedItems.length} items)${linkedPays.length > 0 ? ` — ${linkedPays.length} payment(s) linked` : ''}`, user: 'Sophie' });
+              next.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `${type === 'proforma' ? 'Proforma' : 'Invoice'} ${invNum} created (EUR ${selectedTotal}, ${selectedItems.length} items)${linkedPays.length > 0 ? ` — ${linkedPays.length} payment(s) linked` : ''}`, user: currentUser?.name || 'System' });
               // Optional: check out all rooms
               if (checkout) {
                 (next.rooms || []).forEach(r => { r.status = 'checked-out'; });
                 next.reservationStatus = 'checked-out';
-                next.activityLog.push({ id: Date.now() + 2, timestamp: Date.now(), action: 'Checked out (via quick invoice)', user: 'Sophie' });
+                next.activityLog.push({ id: Date.now() + 2, timestamp: Date.now(), action: 'Checked out (via quick invoice)', user: currentUser?.name || 'System' });
               }
               setEditingReservation(next);
               setBillSelected(null);
@@ -2625,7 +2650,7 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + confirmed
                             p.linkedInvoice = inv.number;
                             const invObj = next.invoices.find(ii => ii.id === inv.id);
                             if (invObj) { if (!invObj.linkedPayments) invObj.linkedPayments = []; invObj.linkedPayments.push(payId); }
-                            next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `EUR ${p.amount} linked to ${inv.number}`, user: 'Sophie' });
+                            next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `EUR ${p.amount} linked to ${inv.number}`, user: currentUser?.name || 'System' });
                             setEditingReservation(next);
                             setToastMessage(`EUR ${p.amount} linked to ${inv.number}`);
                           }
@@ -2746,7 +2771,7 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + confirmed
                                 const invObj = next.invoices.find(ii => ii.id === inv.id);
                                 const newStatus = Math.random() < 0.7 ? 'delivered' : 'error';
                                 if (invObj) invObj.peppolStatus = newStatus;
-                                next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `${inv.number} sent via Peppol — ${newStatus === 'delivered' ? 'delivered' : 'delivery failed'}`, user: 'Sophie' });
+                                next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `${inv.number} sent via Peppol — ${newStatus === 'delivered' ? 'delivered' : 'delivery failed'}`, user: currentUser?.name || 'System' });
                                 setEditingReservation(next);
                                 setToastMessage(newStatus === 'delivered' ? `Delivered via Peppol to ${inv.recipient.peppolId}` : 'Peppol delivery failed — recipient unreachable');
                               }}
@@ -2769,7 +2794,7 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + confirmed
                               next.invoices.push({ id: Date.now(), number: newInvNum, date: new Date().toISOString().split('T')[0], amount: inv.amount, type: 'invoice', status: 'created', items: inv.items ? inv.items.map(i => ({ ...i })) : [], linkedPayments: [], recipient: inv.recipient ? { ...inv.recipient } : null, reference: inv.reference || '', fromProforma: inv.number });
                               // Unlink any payments from the proforma (user links them manually to the new invoice)
                               invPayments.forEach(p => { const pp = next.payments.find(pp => pp.id === p.id); if (pp) pp.linkedInvoice = null; });
-                              next.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Proforma ${inv.number} finalized → invoice ${newInvNum}`, user: 'Sophie' });
+                              next.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Proforma ${inv.number} finalized → invoice ${newInvNum}`, user: currentUser?.name || 'System' });
                               setEditingReservation(next);
                               setBillSelected(null);
                               setToastMessage(`Proforma finalized — invoice ${newInvNum} created`);
@@ -2782,7 +2807,7 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + confirmed
                               next.invoices = next.invoices.filter(ii => ii.id !== inv.id);
                               // Unlink any payments linked to this proforma
                               invPayments.forEach(p => { const pp = next.payments.find(pp => pp.id === p.id); if (pp) pp.linkedInvoice = null; });
-                              next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Proforma ${inv.number} deleted`, user: 'Sophie' });
+                              next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Proforma ${inv.number} deleted`, user: currentUser?.name || 'System' });
                               setEditingReservation(next);
                               setBillSelected(null);
                               setToastMessage(`Proforma ${inv.number} deleted`);
@@ -2800,7 +2825,7 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + confirmed
                               // Unlink payments from credited invoice — return to unlinked pool
                               invPayments.forEach(p => { const pp = next.payments.find(pp => pp.id === p.id); if (pp) pp.linkedInvoice = null; });
                               if (invObj) invObj.linkedPayments = [];
-                              next.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Credit note ${creditNum} for ${inv.number} — items released`, user: 'Sophie' });
+                              next.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Credit note ${creditNum} for ${inv.number} — items released`, user: currentUser?.name || 'System' });
                               setEditingReservation(next);
                               setBillSelected(null);
                               setToastMessage('Credit note created — items available for re-invoicing');
@@ -2865,7 +2890,7 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + confirmed
                             next.invoices.push({ id: Date.now() + 2, number: newInvNum, date: new Date().toISOString().split('T')[0], amount: inv.amount, type: 'invoice', status: 'created', items: inv.items ? inv.items.map(i => ({ ...i })) : [], linkedPayments: [], recipient: newRecipient, reference: inv.reference || '', amendsInvoice: inv.number });
                             // Re-link payments to new invoice
                             invPayments.forEach(p => { const pp = next.payments.find(pp => pp.id === p.id); if (pp) pp.linkedInvoice = newInvNum; });
-                            next.activityLog.push({ id: Date.now() + 3, timestamp: Date.now(), action: `Amended ${inv.number} → credit note ${creditNum} + new invoice ${newInvNum}${amendRecipient ? ` (recipient: ${newRecipient?.name || 'unknown'})` : ''}`, user: 'Sophie' });
+                            next.activityLog.push({ id: Date.now() + 3, timestamp: Date.now(), action: `Amended ${inv.number} → credit note ${creditNum} + new invoice ${newInvNum}${amendRecipient ? ` (recipient: ${newRecipient?.name || 'unknown'})` : ''}`, user: currentUser?.name || 'System' });
                             setEditingReservation(next);
                             setAmendingInvoice(null);
                             setAmendRecipient(null);
@@ -3110,7 +3135,7 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + confirmed
                               const next = JSON.parse(JSON.stringify(ed));
                               const p = next.payments.find(pp => pp.id === payment.id);
                               if (p) { p.status = 'completed'; p.method = cardType ? `${cardType} (Terminal)` : 'Card (Terminal)'; }
-                              next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Terminal payment EUR ${payment.amount} confirmed — ${cardType || 'Card'}`, user: 'Sophie' });
+                              next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Terminal payment EUR ${payment.amount} confirmed — ${cardType || 'Card'}`, user: currentUser?.name || 'System' });
                               setEditingReservation(next);
                               setToastMessage(`Payment confirmed — ${cardType || 'Card'}`);
                             };
@@ -3128,7 +3153,7 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + confirmed
                           <button onClick={() => {
                             const next = JSON.parse(JSON.stringify(ed));
                             next.payments = next.payments.filter(pp => pp.id !== payment.id);
-                            next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Payment deleted: EUR ${payment.amount} (${payment.method})`, user: 'Sophie' });
+                            next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Payment deleted: EUR ${payment.amount} (${payment.method})`, user: currentUser?.name || 'System' });
                             setEditingReservation(next);
                             setToastMessage('Payment deleted');
                           }}
@@ -3174,7 +3199,7 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + confirmed
                               p.confirmedDate = confirmDate;
                               p.note = `Bank transfer confirmed (${confirmDate})`;
                             }
-                            next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Bank transfer EUR ${btPay.amount.toFixed(2)} confirmed — received ${confirmDate}`, user: 'Sophie' });
+                            next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Bank transfer EUR ${btPay.amount.toFixed(2)} confirmed — received ${confirmDate}`, user: currentUser?.name || 'System' });
                             setEditingReservation(next);
                             setConfirmBTPayment(null);
                             setToastMessage('Bank transfer confirmed');
@@ -3351,7 +3376,7 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + confirmed
                         if (amount <= 0) return;
                         const next = JSON.parse(JSON.stringify(ed));
                         next.payments.push({ id: Date.now(), date: new Date().toISOString().split('T')[0], amount, method: 'Terminal', note: 'Sent to terminal', status: 'pending', linkedInvoice: null });
-                        next.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Terminal payment request EUR ${amount}`, user: 'Sophie' });
+                        next.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Terminal payment request EUR ${amount}`, user: currentUser?.name || 'System' });
                         setEditingReservation(next);
                         setToastMessage(`EUR ${amount} sent to terminal`);
                       }}
@@ -3405,7 +3430,7 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + confirmed
                             const reminderDue = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16);
                             if (!next.reminders) next.reminders = [];
                             next.reminders.push({ id: Date.now() + 2, message: `Check payment EUR ${amount} (${recipientEmail})`, dueDate: reminderDue, createdAt: Date.now(), fired: false, toastShown: false });
-                            next.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Email payment request EUR ${amount} sent to ${recipientEmail} — reminder set for 24h`, user: 'Sophie' });
+                            next.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Email payment request EUR ${amount} sent to ${recipientEmail} — reminder set for 24h`, user: currentUser?.name || 'System' });
                             setEditingReservation(next);
                             setToastMessage(`EUR ${amount} request sent to ${recipientEmail}`);
                           }}
@@ -3435,7 +3460,7 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + confirmed
                           if (amount <= 0) return;
                           const next = JSON.parse(JSON.stringify(ed));
                           next.payments.push({ id: Date.now(), date: new Date().toISOString().split('T')[0], amount, method: `Credit Card (•••• ${card.last4})`, note: 'Charged to card on file', status: 'completed', linkedInvoice: null });
-                          next.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Credit card charge: EUR ${amount} (•••• ${card.last4})`, user: 'Sophie' });
+                          next.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Credit card charge: EUR ${amount} (•••• ${card.last4})`, user: currentUser?.name || 'System' });
                           setEditingReservation(next);
                           setToastMessage(`EUR ${amount} charged to •••• ${card.last4}`);
                         }}
@@ -3481,7 +3506,7 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + confirmed
                           confirmedDate: (isBankTransfer && !isRefund) ? null : new Date().toISOString().split('T')[0],
                           linkedInvoice: null
                         });
-                        next.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `${isRefund ? 'Refund' : 'Payment'} recorded: EUR ${amount} (${method})${isBankTransfer && !isRefund ? ' — awaiting confirmation' : ''}`, user: 'Sophie' });
+                        next.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `${isRefund ? 'Refund' : 'Payment'} recorded: EUR ${amount} (${method})${isBankTransfer && !isRefund ? ' — awaiting confirmation' : ''}`, user: currentUser?.name || 'System' });
                         setEditingReservation(next);
                         setToastMessage(`EUR ${amount} ${isRefund ? 'refund' : ''} recorded`);
                         document.getElementById('paymentAmount').value = '';
@@ -3588,7 +3613,7 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + confirmed
                       vatRate: p.cat ? p.cat.defaultVat : (vatRates[0]?.rate ?? 6),
                       unitPrice: p.cat ? getExtraPrice(p.cat, ciDate) : 0,
                     });
-                    next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Extra added: ${p.catName} x${selectedQty}`, user: 'Sophie' });
+                    next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Extra added: ${p.catName} x${selectedQty}`, user: currentUser?.name || 'System' });
                     setEditingReservation(next);
                     setInventoryPopup(null);
                   }}

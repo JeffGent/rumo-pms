@@ -177,6 +177,7 @@ const pullFromSupabase = async () => {
     if (cfgMap.cancellationPolicies && Array.isArray(cfgMap.cancellationPolicies)) { cancellationPolicies.length = 0; cancellationPolicies.push(...cfgMap.cancellationPolicies); saveCancellationPolicies(); }
     if (cfgMap.extrasCatalog && Array.isArray(cfgMap.extrasCatalog)) { extrasCatalog.length = 0; extrasCatalog.push(...cfgMap.extrasCatalog); saveExtrasCatalog(); }
     if (cfgMap.vatRates && Array.isArray(cfgMap.vatRates)) { vatRates.length = 0; vatRates.push(...cfgMap.vatRates); saveVatRates(); }
+    if (cfgMap.hotelUsers && Array.isArray(cfgMap.hotelUsers)) { hotelUsers.length = 0; hotelUsers.push(...cfgMap.hotelUsers); saveHotelUsers(); }
     console.log('[Supabase] Config pulled:', Object.keys(cfgMap).join(', '));
 
     // 2. Pull reservations
@@ -248,6 +249,7 @@ const initialSync = async () => {
       { key: 'cancellationPolicies', data: cancellationPolicies, updated_at: new Date().toISOString() },
       { key: 'extrasCatalog', data: extrasCatalog, updated_at: new Date().toISOString() },
       { key: 'vatRates', data: vatRates, updated_at: new Date().toISOString() },
+      { key: 'hotelUsers', data: hotelUsers, updated_at: new Date().toISOString() },
     ], 'key');
   } catch (e) { console.error('[Supabase] Config sync:', e); }
 

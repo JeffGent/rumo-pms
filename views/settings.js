@@ -1,6 +1,6 @@
 // ── Settings View ────────────────────────────────────────────────────────────
 const SettingsView = (props) => {
-  const { setToastMessage, sidebarCollapsed, setSidebarCollapsed, activePage, setActivePage, setSelectedReservation } = props;
+  const { setToastMessage, sidebarCollapsed, setSidebarCollapsed, activePage, setActivePage, setSelectedReservation, currentUser } = props;
 
   const [settingsTab, setSettingsTab] = useState('general');
   const [localSettings, setLocalSettings] = useState(() => JSON.parse(JSON.stringify(hotelSettings)));
@@ -9,6 +9,7 @@ const SettingsView = (props) => {
   const [localPolicies, setLocalPolicies] = useState(() => JSON.parse(JSON.stringify(cancellationPolicies)));
   const [localExtras, setLocalExtras] = useState(() => JSON.parse(JSON.stringify(extrasCatalog)));
   const [localVatRates, setLocalVatRates] = useState(() => JSON.parse(JSON.stringify(vatRates)));
+  const [localUsers, setLocalUsers] = useState(() => JSON.parse(JSON.stringify(hotelUsers)));
   const [dirty, setDirty] = useState(false);
   const [dragIdx, setDragIdx] = useState(null);
   const [dragOverIdx, setDragOverIdx] = useState(null);
@@ -57,6 +58,13 @@ const SettingsView = (props) => {
     saveExtrasCatalog(); syncConfig('extrasCatalog', extrasCatalog);
     vatRates.length = 0; localVatRates.forEach(vr => vatRates.push(vr));
     saveVatRates(); syncConfig('vatRates', vatRates);
+    // Users
+    const activeAdmins = localUsers.filter(u => u.active && u.role === 'admin');
+    if (activeAdmins.length === 0) { setToastMessage('At least one active admin is required'); return; }
+    const badPin = localUsers.find(u => u.active && u.pin.length < 4);
+    if (badPin) { setToastMessage(`PIN for ${badPin.name || 'new user'} must be at least 4 digits`); return; }
+    hotelUsers.length = 0; localUsers.forEach(u => hotelUsers.push(u));
+    saveHotelUsers(); syncConfig('hotelUsers', hotelUsers);
     setDirty(false);
     setToastMessage('Settings saved');
   };
@@ -112,6 +120,7 @@ const SettingsView = (props) => {
     { id: 'rateplans', label: 'Rate Plans' },
     { id: 'extras', label: 'Extras' },
     { id: 'cancellation', label: 'Cancellation' },
+    ...(currentUser?.role === 'admin' ? [{ id: 'users', label: 'Users' }] : []),
     { id: 'channex', label: 'Channel Manager' },
   ];
 
@@ -124,13 +133,38 @@ const SettingsView = (props) => {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
       </button>
       <nav className="cal-nav">
-        <a className="cal-nav-link" onClick={() => { setActivePage('dashboard'); setSelectedReservation(null); }}><Icons.Calendar width="18" height="18" /><span>Reservations</span></a>
-        <a className={`cal-nav-link${activePage === 'channelmanager' ? ' active' : ''}`} onClick={() => { setActivePage('channelmanager'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18"><circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/><line x1="10.5" y1="7.5" x2="6.5" y2="16.5"/><line x1="13.5" y1="7.5" x2="17.5" y2="16.5"/></svg><span>Channel manager</span></a>
-        <a className={`cal-nav-link${activePage === 'profiles' ? ' active' : ''}`} onClick={() => { setActivePage('profiles'); setSelectedReservation(null); }}><Icons.Users width="18" height="18" /><span>Profiles</span></a>
-        <a className={`cal-nav-link${activePage === 'payments' ? ' active' : ''}`} onClick={() => { setActivePage('payments'); setSelectedReservation(null); }}><Icons.CreditCard width="18" height="18" /><span>Payments</span></a>
-        <a className={`cal-nav-link${activePage === 'reports' ? ' active' : ''}`} onClick={() => { setActivePage('reports'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span>Reports</span></a>
+        {canAccessPage(currentUser?.role, 'dashboard') && <a className="cal-nav-link" onClick={() => { setActivePage('dashboard'); setSelectedReservation(null); }}><Icons.Calendar width="18" height="18" /><span>Reservations</span></a>}
+        {canAccessPage(currentUser?.role, 'channelmanager') && <a className={`cal-nav-link${activePage === 'channelmanager' ? ' active' : ''}`} onClick={() => { setActivePage('channelmanager'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18"><circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/><line x1="10.5" y1="7.5" x2="6.5" y2="16.5"/><line x1="13.5" y1="7.5" x2="17.5" y2="16.5"/></svg><span>Channel manager</span></a>}
+        {canAccessPage(currentUser?.role, 'profiles') && <a className={`cal-nav-link${activePage === 'profiles' ? ' active' : ''}`} onClick={() => { setActivePage('profiles'); setSelectedReservation(null); }}><Icons.Users width="18" height="18" /><span>Profiles</span></a>}
+        {canAccessPage(currentUser?.role, 'payments') && <a className={`cal-nav-link${activePage === 'payments' ? ' active' : ''}`} onClick={() => { setActivePage('payments'); setSelectedReservation(null); }}><Icons.CreditCard width="18" height="18" /><span>Payments</span></a>}
+        {canAccessPage(currentUser?.role, 'reports') && <a className={`cal-nav-link${activePage === 'reports' ? ' active' : ''}`} onClick={() => { setActivePage('reports'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span>Reports</span></a>}
         <a className="cal-nav-link active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>Settings</span></a>
       </nav>
+      <div className="cal-nav-user">
+        <div className="relative">
+          <button onClick={() => props.setUserMenuOpen(prev => !prev)}
+            className={`flex items-center gap-2 w-full px-2 py-1.5 hover:bg-neutral-100 rounded-xl transition-colors ${sidebarCollapsed ? 'justify-center' : ''}`}>
+            <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0"
+              style={{ backgroundColor: currentUser?.color || '#6b7280' }}>
+              {currentUser?.name?.split(' ').map(n => n[0]).join('') || '?'}
+            </div>
+            {!sidebarCollapsed && <span className="text-xs text-neutral-600 truncate">{currentUser?.name?.split(' ')[0]}</span>}
+          </button>
+          {props.userMenuOpen && (<>
+            <div className="fixed inset-0 z-[49]" onClick={() => props.setUserMenuOpen(false)} />
+            <div className="absolute left-0 bottom-full mb-1 w-48 bg-white rounded-xl shadow-lg border border-neutral-200 py-1 z-[50]">
+              <div className="px-3 py-2 border-b border-neutral-100">
+                <div className="text-sm font-medium text-neutral-900">{currentUser?.name}</div>
+                <div className="text-[11px] text-neutral-400 capitalize">{currentUser?.role}</div>
+              </div>
+              <button onClick={props.handleLogout} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                Sign out
+              </button>
+            </div>
+          </>)}
+        </div>
+      </div>
       <div className="cal-nav-footer">{!sidebarCollapsed && (<>Rumo &copy;<br/>All Rights Reserved</>)}</div>
     </aside>
   );
@@ -172,7 +206,12 @@ const SettingsView = (props) => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div><label className={labelClass}>Hotel Name</label><input value={localSettings.hotelName} onChange={e => updateSetting('hotelName', e.target.value)} className={inputClass} /></div>
             <div><label className={labelClass}>VAT Number</label><input value={localSettings.hotelVat} onChange={e => updateSetting('hotelVat', e.target.value)} className={inputClass} /></div>
-            <div><label className={labelClass}>Address</label><input value={localSettings.hotelAddress} onChange={e => updateSetting('hotelAddress', e.target.value)} className={inputClass} /></div>
+            <div><label className={labelClass}>Street + Nr</label><input value={localSettings.hotelStreet || ''} onChange={e => updateSetting('hotelStreet', e.target.value)} className={inputClass} /></div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <div><label className={labelClass}>Postal Code</label><input value={localSettings.hotelZip || ''} onChange={e => updateSetting('hotelZip', e.target.value)} className={inputClass} /></div>
+              <div><label className={labelClass}>City</label><input value={localSettings.hotelCity || ''} onChange={e => updateSetting('hotelCity', e.target.value)} className={inputClass} /></div>
+              <div><label className={labelClass}>Country</label><input value={localSettings.hotelCountry || ''} onChange={e => updateSetting('hotelCountry', e.target.value)} className={inputClass} /></div>
+            </div>
             <div><label className={labelClass}>Email</label><input value={localSettings.hotelEmail} onChange={e => updateSetting('hotelEmail', e.target.value)} className={inputClass} /></div>
             <div><label className={labelClass}>Phone</label><input value={localSettings.hotelPhone} onChange={e => updateSetting('hotelPhone', e.target.value)} className={inputClass} /></div>
             <div><label className={labelClass}>Currency</label>
@@ -798,7 +837,91 @@ const SettingsView = (props) => {
         </div>
       )}
 
-      {settingsTab === 'channex' && (
+      {settingsTab === 'users' && currentUser?.role === 'admin' && (
+        <div className="bg-white border border-neutral-200 rounded-2xl overflow-x-auto">
+          <table className="w-full min-w-[600px] text-sm">
+            <thead>
+              <tr className="border-b border-neutral-100 text-[11px] font-medium text-neutral-400 uppercase tracking-wider">
+                <th className="text-left pl-4 pr-2 py-2.5 w-10"></th>
+                <th className="text-left px-2 py-2.5" style={{width:'30%'}}>Name</th>
+                <th className="text-left px-2 py-2.5" style={{width:'12%'}}>PIN</th>
+                <th className="text-left px-2 py-2.5" style={{width:'20%'}}>Role</th>
+                <th className="text-left px-2 py-2.5 hidden md:table-cell" style={{width:'20%'}}>Department</th>
+                <th className="text-center px-2 py-2.5 w-14">Active</th>
+                <th className="px-3 py-2.5 w-8"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {localUsers.map((user, i) => (
+                <tr key={user.id} className={`border-b border-neutral-50 hover:bg-neutral-50/50 transition-colors${!user.active ? ' opacity-40' : ''}`}>
+                  <td className="px-4 py-2">
+                    <label className="relative w-7 h-7 rounded-full cursor-pointer block" style={{ backgroundColor: user.color }} title="Color">
+                      <input type="color" value={user.color} onChange={e => { setLocalUsers(prev => { const next = [...prev]; next[i] = { ...next[i], color: e.target.value, updatedAt: Date.now() }; return next; }); setDirty(true); }}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                    </label>
+                  </td>
+                  <td className="px-2 py-2">
+                    <input value={user.name} onChange={e => { setLocalUsers(prev => { const next = [...prev]; next[i] = { ...next[i], name: e.target.value, updatedAt: Date.now() }; return next; }); setDirty(true); }}
+                      className="w-full bg-transparent text-sm text-neutral-900 outline-none border-b border-transparent focus:border-neutral-300 py-1 transition-colors" placeholder="Full name" />
+                  </td>
+                  <td className="px-2 py-2">
+                    <input type="password" inputMode="numeric" maxLength={6} value={user.pin} onChange={e => { const v = e.target.value.replace(/\D/g, ''); setLocalUsers(prev => { const next = [...prev]; next[i] = { ...next[i], pin: v, updatedAt: Date.now() }; return next; }); setDirty(true); }}
+                      className="w-full bg-transparent text-sm text-neutral-900 outline-none border-b border-transparent focus:border-neutral-300 py-1 transition-colors" placeholder="PIN" />
+                  </td>
+                  <td className="px-2 py-2">
+                    <select value={user.role} onChange={e => {
+                      if (user.id === currentUser.id && e.target.value !== 'admin') {
+                        const otherAdmins = localUsers.filter(u => u.active && u.role === 'admin' && u.id !== user.id);
+                        if (otherAdmins.length === 0) { setToastMessage('Cannot change role — you are the only admin'); return; }
+                      }
+                      setLocalUsers(prev => { const next = [...prev]; next[i] = { ...next[i], role: e.target.value, updatedAt: Date.now() }; return next; }); setDirty(true);
+                    }} className="w-full bg-transparent text-sm text-neutral-900 outline-none py-1 cursor-pointer">
+                      <option value="admin">Admin</option>
+                      <option value="manager">Manager</option>
+                      <option value="receptionist">Receptionist</option>
+                      <option value="housekeeping">Housekeeping</option>
+                      <option value="fb">F&B</option>
+                    </select>
+                  </td>
+                  <td className="px-2 py-2 hidden md:table-cell">
+                    <input value={user.department} onChange={e => { setLocalUsers(prev => { const next = [...prev]; next[i] = { ...next[i], department: e.target.value, updatedAt: Date.now() }; return next; }); setDirty(true); }}
+                      className="w-full bg-transparent text-sm text-neutral-900 outline-none border-b border-transparent focus:border-neutral-300 py-1 transition-colors" placeholder="Department" />
+                  </td>
+                  <td className="px-2 py-2 text-center">
+                    <input type="checkbox" checked={user.active !== false} onChange={e => {
+                      if (!e.target.checked && user.role === 'admin') {
+                        const otherAdmins = localUsers.filter(u => u.active && u.role === 'admin' && u.id !== user.id);
+                        if (otherAdmins.length === 0) { setToastMessage('Cannot deactivate the last admin'); return; }
+                      }
+                      setLocalUsers(prev => { const next = [...prev]; next[i] = { ...next[i], active: e.target.checked, updatedAt: Date.now() }; return next; }); setDirty(true);
+                    }} className="rounded border-neutral-300 cursor-pointer" />
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <button onClick={() => {
+                      if (user.id === currentUser.id) { setToastMessage('Cannot remove yourself'); return; }
+                      const activeAdmins = localUsers.filter(u => u.active && u.role === 'admin' && u.id !== user.id);
+                      if (user.role === 'admin' && activeAdmins.length === 0) { setToastMessage('Cannot remove the last admin'); return; }
+                      setLocalUsers(prev => prev.filter((_, idx) => idx !== i));
+                      setDirty(true);
+                    }} className="text-neutral-300 hover:text-red-500 transition-colors" title="Remove">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <button onClick={() => {
+            const newId = 'usr-' + Date.now();
+            setLocalUsers(prev => [...prev, { id: newId, name: '', pin: '', role: 'receptionist', department: 'Reception', color: '#6b7280', active: true, createdAt: Date.now(), updatedAt: Date.now() }]);
+            setDirty(true);
+          }} className="w-full py-2.5 text-xs font-medium text-neutral-400 hover:text-neutral-600 hover:bg-neutral-50 transition-colors border-t border-neutral-100">
+            + Add User
+          </button>
+        </div>
+      )}
+
+      {settingsTab === 'channex' && (<>
         <div className="bg-white border border-neutral-200 rounded-2xl p-6">
           <h3 className="text-sm font-semibold text-neutral-900 mb-4">Channel Manager — Channex.io</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
@@ -830,7 +953,61 @@ const SettingsView = (props) => {
             </div>
           </div>
         </div>
-      )}
+
+        {/* Auto Close */}
+        <div className="bg-white border border-neutral-200 rounded-2xl p-6 mt-4">
+          <div className="flex items-center justify-between mb-1">
+            <h3 className="text-sm font-semibold text-neutral-900">Auto Close</h3>
+            <button onClick={() => {
+              setLocalSettings(prev => ({
+                ...prev,
+                autoClose: {
+                  ...(prev.autoClose || { receptionCloseTime: '22:00', stopSellOffset: 30, applyToChannels: 'all' }),
+                  enabled: !prev.autoClose?.enabled
+                }
+              }));
+              setDirty(true);
+            }} className={`relative w-9 h-5 rounded-full transition-colors ${localSettings.autoClose?.enabled ? 'bg-emerald-500' : 'bg-neutral-300'}`}>
+              <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${localSettings.autoClose?.enabled ? 'left-[18px]' : 'left-0.5'}`} />
+            </button>
+          </div>
+          <p className="text-xs text-neutral-400 mb-4">Automatically stop sell all room types on all connected channels before reception closes each night.</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className={labelClass}>Reception closes at</label>
+              <input type="time" value={localSettings.autoClose?.receptionCloseTime || '22:00'}
+                onChange={e => { setLocalSettings(prev => ({ ...prev, autoClose: { ...prev.autoClose, receptionCloseTime: e.target.value } })); setDirty(true); }}
+                className={inputClass} />
+            </div>
+            <div>
+              <label className={labelClass}>Stop sell offset</label>
+              <select value={localSettings.autoClose?.stopSellOffset || 30}
+                onChange={e => { setLocalSettings(prev => ({ ...prev, autoClose: { ...prev.autoClose, stopSellOffset: Number(e.target.value) } })); setDirty(true); }}
+                className={inputClass}>
+                <option value={15}>15 minutes before</option>
+                <option value={30}>30 minutes before</option>
+                <option value={45}>45 minutes before</option>
+                <option value={60}>60 minutes before</option>
+              </select>
+            </div>
+            <div className="flex items-end">
+              <div className={`flex items-center gap-2 px-3 py-2 rounded-xl w-full ${localSettings.autoClose?.enabled ? 'bg-amber-50 border border-amber-100' : 'bg-neutral-50 border border-neutral-100'}`}>
+                <svg viewBox="0 0 24 24" fill="none" stroke={localSettings.autoClose?.enabled ? '#b45309' : '#a3a3a3'} strokeWidth="2" width="14" height="14"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span className={`text-xs font-medium ${localSettings.autoClose?.enabled ? 'text-amber-800' : 'text-neutral-400'}`}>Stop sell at {(() => {
+                  const ct = localSettings.autoClose?.receptionCloseTime || '22:00';
+                  const off = localSettings.autoClose?.stopSellOffset || 30;
+                  const [h, m] = ct.split(':').map(Number);
+                  const t = h * 60 + m - off;
+                  const sh = Math.floor(((t % 1440) + 1440) % 1440 / 60);
+                  const sm = ((t % 1440) + 1440) % 1440 % 60;
+                  return `${String(sh).padStart(2, '0')}:${String(sm).padStart(2, '0')}`;
+                })()}</span>
+              </div>
+            </div>
+          </div>
+          <p className="text-[10px] text-neutral-400 mt-3">{localSettings.autoClose?.enabled ? 'In production this will run automatically via a server-side scheduler. Use "Apply Now" in Channel Manager for manual trigger.' : 'Enable the toggle to activate automatic stop sell.'}</p>
+        </div>
+      </>)}
     </div>
     </div>
 

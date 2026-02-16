@@ -302,7 +302,7 @@ const MessagesPanel = (props) => {
                               const r = (resObj.reminders || []).find(r => r.id === rem.id);
                               if (r) r.fired = true;
                               resObj.activityLog = resObj.activityLog || [];
-                              resObj.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Reminder acknowledged: "${rem.message}"`, user: 'Sophie' });
+                              resObj.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Reminder acknowledged: "${rem.message}"`, user: currentUser?.name || 'System' });
                               saveReservationSingle(resObj);
                               setToastMessage('Reminder acknowledged');
                               setTime(new Date());

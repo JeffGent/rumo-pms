@@ -8,21 +8,56 @@ const generateReservations = () => {
   const roomTypeMap = {};
   rooms.forEach(r => { roomTypeMap[r] = getRoomTypeName(r); });
   const guestNames = [
+    // Belgian / Flemish
     { firstName: 'Marcel', lastName: 'Kiekeboe' }, { firstName: 'Charlotte', lastName: 'Kiekeboe' },
     { firstName: 'Fanny', lastName: 'Kiekeboe' }, { firstName: 'Konstantinopel', lastName: 'Kiekeboe' },
     { firstName: 'Leon', lastName: 'Van der Neffe' }, { firstName: 'Froefroe', lastName: 'Van der Neffe' },
-    { firstName: 'Joeksel', lastName: 'Van der Neffe' }, { firstName: 'Firmin', lastName: 'Van de Kasseien' },
-    { firstName: 'Yvonne', lastName: 'Van de Kasseien' }, { firstName: 'Fernand', lastName: 'Goegebuer' },
-    { firstName: 'Carmella', lastName: 'Vuylstreke' }, { firstName: 'Vital', lastName: 'Kiekeboe' },
+    { firstName: 'Firmin', lastName: 'Van de Kasseien' }, { firstName: 'Yvonne', lastName: 'Van de Kasseien' },
+    { firstName: 'Fernand', lastName: 'Goegebuer' }, { firstName: 'Carmella', lastName: 'Vuylstreke' },
     { firstName: 'Balthazar', lastName: 'Balthazar' }, { firstName: 'Dédé', lastName: 'La Canaille' },
-    { firstName: 'Timothea', lastName: 'Triangl' }, { firstName: 'Tomboy', lastName: 'De Wilde' },
-    { firstName: 'Moemoe', lastName: 'Kiekeboe' }, { firstName: 'August', lastName: 'Sapperdeboere' },
+    { firstName: 'Timothea', lastName: 'Triangl' }, { firstName: 'August', lastName: 'Sapperdeboere' },
     { firstName: 'Jules', lastName: 'Porei' }, { firstName: 'Angèle', lastName: 'Stokvis' },
     { firstName: 'Emiel', lastName: 'Van Zwam' }, { firstName: 'Alfons', lastName: 'Munte' },
     { firstName: 'Eduard', lastName: 'Van Krot' }, { firstName: 'Oscar', lastName: 'Wapper' },
     { firstName: 'Bob', lastName: 'Stapper' }, { firstName: 'Georgina', lastName: 'De Vadder' },
     { firstName: 'Dimitri', lastName: 'De Tremmer' }, { firstName: 'Hector', lastName: 'Van den Drommel' },
-    { firstName: 'Dick', lastName: 'Van Vooren' }
+    { firstName: 'Dick', lastName: 'Van Vooren' }, { firstName: 'Guido', lastName: 'Gezansen' },
+    { firstName: 'Rita', lastName: 'Pansen' }, { firstName: 'Willy', lastName: 'Schoeters' },
+    { firstName: 'Bernadette', lastName: 'Claessens' }, { firstName: 'Roger', lastName: 'Willems' },
+    // Dutch
+    { firstName: 'Jan', lastName: 'De Boer' }, { firstName: 'Pieter', lastName: 'Vermeulen' },
+    { firstName: 'Anneke', lastName: 'Van Dijk' }, { firstName: 'Henk', lastName: 'Bakker' },
+    { firstName: 'Mariëtte', lastName: 'Visser' }, { firstName: 'Bram', lastName: 'Smits' },
+    { firstName: 'Sanne', lastName: 'Meijer' }, { firstName: 'Thijs', lastName: 'De Graaf' },
+    { firstName: 'Fleur', lastName: 'Mulder' }, { firstName: 'Joris', lastName: 'Bos' },
+    { firstName: 'Lies', lastName: 'Hendriks' }, { firstName: 'Ruben', lastName: 'Dekker' },
+    { firstName: 'Femke', lastName: 'Dijkstra' }, { firstName: 'Koen', lastName: 'Van Leeuwen' },
+    { firstName: 'Maaike', lastName: 'Peters' }, { firstName: 'Daan', lastName: 'Brouwer' },
+    { firstName: 'Eline', lastName: 'De Wit' }, { firstName: 'Stijn', lastName: 'Jansen' },
+    // German
+    { firstName: 'Klaus', lastName: 'Müller' }, { firstName: 'Petra', lastName: 'Schmidt' },
+    { firstName: 'Wolfgang', lastName: 'Schneider' }, { firstName: 'Ingrid', lastName: 'Fischer' },
+    { firstName: 'Dieter', lastName: 'Weber' }, { firstName: 'Monika', lastName: 'Wagner' },
+    { firstName: 'Hans', lastName: 'Becker' }, { firstName: 'Greta', lastName: 'Hoffmann' },
+    { firstName: 'Stefan', lastName: 'Richter' }, { firstName: 'Claudia', lastName: 'Klein' },
+    // French
+    { firstName: 'Pierre', lastName: 'Dupont' }, { firstName: 'Marie', lastName: 'Laurent' },
+    { firstName: 'Jean-Luc', lastName: 'Martin' }, { firstName: 'Isabelle', lastName: 'Moreau' },
+    { firstName: 'François', lastName: 'Bernard' }, { firstName: 'Nathalie', lastName: 'Robert' },
+    { firstName: 'Philippe', lastName: 'Petit' }, { firstName: 'Céline', lastName: 'Duval' },
+    // British / American
+    { firstName: 'James', lastName: 'Thompson' }, { firstName: 'Sarah', lastName: 'Williams' },
+    { firstName: 'Oliver', lastName: 'Brown' }, { firstName: 'Emily', lastName: 'Davies' },
+    { firstName: 'Michael', lastName: 'Johnson' }, { firstName: 'Catherine', lastName: 'Wilson' },
+    { firstName: 'David', lastName: 'Taylor' }, { firstName: 'Rachel', lastName: 'Clark' },
+    // Italian / Spanish
+    { firstName: 'Marco', lastName: 'Rossi' }, { firstName: 'Lucia', lastName: 'Bianchi' },
+    { firstName: 'Alessandro', lastName: 'Conti' }, { firstName: 'Chiara', lastName: 'Romano' },
+    { firstName: 'Carlos', lastName: 'García' }, { firstName: 'María', lastName: 'Fernández' },
+    { firstName: 'Pablo', lastName: 'López' }, { firstName: 'Ana', lastName: 'Martínez' },
+    // Scandinavian
+    { firstName: 'Erik', lastName: 'Lindqvist' }, { firstName: 'Astrid', lastName: 'Johansson' },
+    { firstName: 'Lars', lastName: 'Andersen' }, { firstName: 'Sigrid', lastName: 'Nilsen' },
   ];
   // Stay length: 50% 1n, 20% 2n, 10% 3n, 10% 4-5n, 7% 6-8n, 3% 9-14n
   const getRandomStayLength = () => {
@@ -235,13 +270,13 @@ const generateReservations = () => {
     };
   };
 
-  // --- Phase 1: Fill rooms sequentially targeting ~45% occupancy ---
+  // --- Phase 1: Fill rooms sequentially targeting ~30% occupancy ---
   rooms.forEach(room => {
     let currentDay = -30;
     while (currentDay < 30) {
-      // ~55% chance of gap (1-3 days), gives ~45% occupancy
-      if (Math.random() < 0.55) {
-        currentDay += 1 + Math.floor(Math.random() * 3);
+      // ~70% chance of gap (1-4 days), gives ~30% occupancy
+      if (Math.random() < 0.70) {
+        currentDay += 1 + Math.floor(Math.random() * 4);
       }
       if (currentDay >= 30) break;
 
@@ -321,7 +356,7 @@ const generateReservations = () => {
 };
 
 // Data version — increment to force regeneration when model changes
-const DATA_VERSION = 29;
+const DATA_VERSION = 32;
 
 // Laad of genereer reserveringen met localStorage persistentie
 const getReservations = () => {
@@ -409,44 +444,73 @@ function syncBookerProfiles() {
 }
 syncBookerProfiles();
 
-// Staff members for internal messaging
-const staffMembers = [
-  { id: 'sophie', name: 'Sophie Laurent', role: 'Front Desk', department: 'Reception', color: '#2563eb' },
-  { id: 'lukas', name: 'Lukas Vermeer', role: 'Head Housekeeper', department: 'Housekeeping', color: '#059669' },
-  { id: 'emma', name: 'Emma De Smet', role: 'F&B Manager', department: 'F&B', color: '#d97706' },
-  { id: 'peter', name: 'Peter Claes', role: 'General Manager', department: 'Management', color: '#7c3aed' },
-  { id: 'nina', name: 'Nina Peeters', role: 'Night Auditor', department: 'Reception', color: '#2563eb' },
-];
+// Staff members — derived from hotelUsers for messaging backward-compat
+const staffMembers = hotelUsers.filter(u => u.active).map(u => ({
+  id: u.id, name: u.name, role: u.department, department: u.department, color: u.color,
+}));
 
-const currentUserId = 'sophie'; // Logged in as Sophie (Reception)
+// Current user — set by login screen, persisted in sessionStorage
+let currentUserId = null;
+let currentUser = null;
 
-// Group channels
-const groupChannels = [
-  { id: 'group-reception', name: 'Reception', color: '#2563eb', members: ['sophie', 'nina'] },
-  { id: 'group-housekeeping', name: 'Housekeeping', color: '#059669', members: ['lukas'] },
-  { id: 'group-fb', name: 'F&B', color: '#d97706', members: ['emma'] },
-  { id: 'group-all', name: 'All Staff', color: '#171717', members: ['sophie', 'lukas', 'emma', 'peter', 'nina'] },
-];
+const setCurrentUser = (userId) => {
+  const user = hotelUsers.find(u => u.id === userId && u.active);
+  if (user) {
+    currentUserId = user.id;
+    currentUser = user;
+    try { sessionStorage.setItem('rumoCurrentUserId', userId); } catch(e) {}
+  }
+};
+
+const clearCurrentUser = () => {
+  currentUserId = null;
+  currentUser = null;
+  try { sessionStorage.removeItem('rumoCurrentUserId'); } catch(e) {}
+};
+
+// Restore session on load
+(() => {
+  try {
+    const sessionId = sessionStorage.getItem('rumoCurrentUserId');
+    if (sessionId) setCurrentUser(sessionId);
+  } catch(e) {}
+})();
+
+// Group channels — dynamic from user departments
+const groupChannels = (() => {
+  const deptMap = {};
+  hotelUsers.filter(u => u.active).forEach(u => {
+    const key = u.department.toLowerCase().replace(/\s+/g, '-');
+    if (!deptMap[key]) deptMap[key] = { id: `group-${key}`, name: u.department, color: u.color, members: [] };
+    deptMap[key].members.push(u.id);
+  });
+  const channels = Object.values(deptMap);
+  channels.push({ id: 'group-all', name: 'All Staff', color: '#171717', members: hotelUsers.filter(u => u.active).map(u => u.id) });
+  return channels;
+})();
 
 const generateInitialMessages = () => {
   const now = Date.now();
   const min = 60000;
   const hr = 3600000;
+  // Map user IDs by name for readability
+  const uid = (name) => { const u = hotelUsers.find(u => u.name.toLowerCase().includes(name)); return u ? u.id : 'usr-1'; };
+  const sophie = uid('sophie'), lukas = uid('lukas'), emma = uid('emma'), peter = uid('peter'), nina = uid('nina');
   return [
-    { id: 1, from: 'lukas', to: 'sophie', text: 'Room 204 needs extra towels and pillows. Guest requested it twice already.', timestamp: now - 3 * min, read: false },
-    { id: 2, from: 'sophie', to: 'lukas', text: 'On it, sending someone up right away!', timestamp: now - 2 * min, read: true },
-    { id: 3, from: 'lukas', to: 'sophie', text: 'Thanks. Also room 108 checkout was messy, will need deep clean.', timestamp: now - 1 * min, read: false },
-    { id: 4, from: 'emma', to: 'sophie', text: 'Breakfast count updated to 18 covers for tomorrow. Can you confirm with the guest in 301?', timestamp: now - 15 * min, read: false },
-    { id: 5, from: 'sophie', to: 'emma', text: 'Will check with them at dinner tonight.', timestamp: now - 12 * min, read: true },
-    { id: 6, from: 'peter', to: 'sophie', text: 'Good morning team. We have a VIP arriving at 14:00 — room 301. Please ensure everything is perfect.', timestamp: now - 2 * hr, read: true },
-    { id: 7, from: 'sophie', to: 'peter', text: 'Noted! Room is prepped, welcome package ready.', timestamp: now - 1.5 * hr, read: true },
-    { id: 8, from: 'peter', to: 'sophie', text: 'Perfect. Let me know when they check in.', timestamp: now - 1 * hr, read: true },
-    { id: 9, from: 'nina', to: 'sophie', text: 'Hey Sophie, quiet night. Guest in 205 asked about late checkout tomorrow — I told them to confirm with you in the morning.', timestamp: now - 6 * hr, read: true },
-    { id: 10, from: 'emma', to: 'sophie', text: 'Room service order for 402 — bottle of champagne + cheese platter. Can you add it to their folio?', timestamp: now - 45 * min, read: false },
-    { id: 11, from: 'peter', to: 'group-all', text: 'Reminder: fire drill scheduled for Thursday at 10:00. Please inform your teams.', timestamp: now - 4 * hr, readBy: ['sophie', 'peter'] },
-    { id: 12, from: 'sophie', to: 'group-reception', text: 'New check-in procedure starting today — please scan passport on arrival.', timestamp: now - 3 * hr, readBy: ['sophie'] },
-    { id: 13, from: 'nina', to: 'group-reception', text: 'Got it, will follow the new procedure tonight.', timestamp: now - 2.5 * hr, readBy: ['sophie', 'nina'] },
-    { id: 14, from: 'lukas', to: 'group-housekeeping', text: 'Deep clean schedule updated for this week. Check the board.', timestamp: now - 5 * hr, readBy: ['lukas'] },
-    { id: 15, from: 'emma', to: 'group-fb', text: 'Menu change: we are out of salmon today. Substitute with sea bass.', timestamp: now - 30 * min, readBy: ['emma'] },
+    { id: 1, from: lukas, to: sophie, text: 'Room 204 needs extra towels and pillows. Guest requested it twice already.', timestamp: now - 3 * min, read: false },
+    { id: 2, from: sophie, to: lukas, text: 'On it, sending someone up right away!', timestamp: now - 2 * min, read: true },
+    { id: 3, from: lukas, to: sophie, text: 'Thanks. Also room 108 checkout was messy, will need deep clean.', timestamp: now - 1 * min, read: false },
+    { id: 4, from: emma, to: sophie, text: 'Breakfast count updated to 18 covers for tomorrow. Can you confirm with the guest in 301?', timestamp: now - 15 * min, read: false },
+    { id: 5, from: sophie, to: emma, text: 'Will check with them at dinner tonight.', timestamp: now - 12 * min, read: true },
+    { id: 6, from: peter, to: sophie, text: 'Good morning team. We have a VIP arriving at 14:00 — room 301. Please ensure everything is perfect.', timestamp: now - 2 * hr, read: true },
+    { id: 7, from: sophie, to: peter, text: 'Noted! Room is prepped, welcome package ready.', timestamp: now - 1.5 * hr, read: true },
+    { id: 8, from: peter, to: sophie, text: 'Perfect. Let me know when they check in.', timestamp: now - 1 * hr, read: true },
+    { id: 9, from: nina, to: sophie, text: 'Hey Sophie, quiet night. Guest in 205 asked about late checkout tomorrow — I told them to confirm with you in the morning.', timestamp: now - 6 * hr, read: true },
+    { id: 10, from: emma, to: sophie, text: 'Room service order for 402 — bottle of champagne + cheese platter. Can you add it to their folio?', timestamp: now - 45 * min, read: false },
+    { id: 11, from: peter, to: 'group-all', text: 'Reminder: fire drill scheduled for Thursday at 10:00. Please inform your teams.', timestamp: now - 4 * hr, readBy: [sophie, peter] },
+    { id: 12, from: sophie, to: 'group-reception', text: 'New check-in procedure starting today — please scan passport on arrival.', timestamp: now - 3 * hr, readBy: [sophie] },
+    { id: 13, from: nina, to: 'group-reception', text: 'Got it, will follow the new procedure tonight.', timestamp: now - 2.5 * hr, readBy: [sophie, nina] },
+    { id: 14, from: lukas, to: 'group-housekeeping', text: 'Deep clean schedule updated for this week. Check the board.', timestamp: now - 5 * hr, readBy: [lukas] },
+    { id: 15, from: emma, to: 'group-fb', text: 'Menu change: we are out of salmon today. Substitute with sea bass.', timestamp: now - 30 * min, readBy: [emma] },
   ];
 };

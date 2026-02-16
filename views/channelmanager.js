@@ -33,6 +33,7 @@ const ChannelManagerView = (props) => {
   const [bulkAvailability, setBulkAvailability] = useState(''); // '' | 'close' | 'open'
   const [bulkDays, setBulkDays] = useState([]); // day indices 0-6, empty = all
   const [rateChannel, setRateChannel] = useState(''); // '' = all channels (base rates), or channel id
+  const [syncProgress, setSyncProgress] = useState(null); // { channelName, current, total, phase }
 
   // Smart Pricing state
   const [spConfig, setSpConfig] = useState(() => JSON.parse(JSON.stringify(smartPricingConfig)));
@@ -62,7 +63,7 @@ const ChannelManagerView = (props) => {
   }, []);
 
   // ── Helpers ────────────────────────────────────────────────────────────
-  const fmtDate = (d) => d.toISOString().slice(0, 10);
+  const fmtDate = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   const addD = (d, n) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
   const days = Array.from({length: rateDays}, (_, i) => addD(rateDate, i));
   const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -215,8 +216,8 @@ const ChannelManagerView = (props) => {
 
   const applyBulk = () => {
     if (!bulkFrom || !bulkTo) { setToastMessage('Select date range for bulk update'); return; }
-    const from = new Date(bulkFrom);
-    const to = new Date(bulkTo);
+    const from = new Date(bulkFrom + 'T00:00:00');
+    const to = new Date(bulkTo + 'T00:00:00');
     if (from > to) { setToastMessage('From date must be before To date'); return; }
     let count = 0;
     const newOverrides = { ...localOverrides };
@@ -343,25 +344,130 @@ const ChannelManagerView = (props) => {
     setToastMessage(`Auto Availability: ${closed} closed, ${opened} opened for ${channel.name} (${days} days). Save to persist.`);
   };
 
-  const triggerFullSync = (channelName) => {
-    const logEntry = { id: 'log-' + Date.now(), timestamp: new Date().toISOString(), type: 'sync', channel: channelName, message: 'Full sync triggered', details: `${roomTypes.length} room types, ${ratePlans.length} rate plans, 500 days ARI` };
-    channelActivityLog.unshift(logEntry);
-    saveChannelActivityLog();
-    setLocalChannels(prev => prev.map(ch => ch.name === channelName ? { ...ch, lastSync: new Date().toISOString() } : ch));
-    setChannelDirty(true);
-    setToastMessage(`Full sync triggered for ${channelName}`);
+  const triggerFullSync = (channelId) => {
+    const SYNC_DAYS = 365;
+    const ch = localChannels.find(c => c.id === channelId);
+    if (!ch) return;
+    const chName = ch.name;
+    const chModifier = ch.rateModifier || 0;
+    const chRateOverrides = ch.channelRateOverrides || {};
+    const chRestrictionOverrides = { ...(ch.restrictionOverrides || {}) };
+    const today = new Date(); today.setHours(0,0,0,0);
+
+    setSyncProgress({ channelName: chName, current: 0, total: SYNC_DAYS, phase: 'Preparing...' });
+
+    // Build ARI payload in batches via setTimeout to keep UI responsive
+    const ariPayload = [];
+    let rateCount = 0, restrictionCount = 0, stopSellCount = 0;
+    let batchIndex = 0;
+    const BATCH_SIZE = 30;
+
+    const processBatch = () => {
+      const start = batchIndex * BATCH_SIZE;
+      const end = Math.min(start + BATCH_SIZE, SYNC_DAYS);
+
+      for (let i = start; i < end; i++) {
+        const d = addD(today, i);
+        const ds = fmtDate(d);
+
+        roomTypes.forEach(rt => {
+          const avail = getAvailability(rt.id, d);
+          const baseRestriction = localRestrictions[`${rt.id}:${ds}`] || { minStay: 0, maxStay: 0, stopSell: false };
+          const chRKey = `${ch.id}:${rt.id}:${ds}`;
+          const chRestriction = chRestrictionOverrides[chRKey];
+          const restriction = chRestriction ? { ...baseRestriction, ...chRestriction } : baseRestriction;
+
+          // Apply auto-availability rules if enabled
+          if (ch.autoAvailability?.enabled) {
+            const occ = rt.rooms.length ? Math.round((1 - avail / rt.rooms.length) * 100) : 0;
+            (ch.autoAvailability.rules || []).forEach(rule => {
+              if (rule.roomTypeId !== rt.id) return;
+              if (occ >= rule.maxOccupancy) {
+                restriction.stopSell = true;
+                chRestrictionOverrides[chRKey] = { ...(chRestrictionOverrides[chRKey] || {}), stopSell: true };
+              }
+            });
+          }
+
+          if (restriction.stopSell) stopSellCount++;
+          if (restriction.minStay || restriction.maxStay || restriction.stopSell) restrictionCount++;
+
+          ratePlans.forEach(rp => {
+            // Compute channel price: base → plan modifier → channel override or channel modifier
+            const baseKey = `${rt.id}:${rp.id}:${ds}`;
+            const basePrice = localOverrides[baseKey] !== undefined
+              ? localOverrides[baseKey]
+              : Math.round(rt.defaultRate + rp.priceModifier);
+            const chPriceKey = `${ch.id}:${rt.id}:${rp.id}:${ds}`;
+            const channelPrice = chRateOverrides[chPriceKey] !== undefined
+              ? chRateOverrides[chPriceKey]
+              : Math.round(basePrice * (1 + chModifier / 100));
+
+            ariPayload.push({
+              date: ds,
+              roomTypeId: rt.id,
+              ratePlanId: rp.id,
+              price: channelPrice,
+              availability: avail,
+              stopSell: restriction.stopSell || false,
+              minStay: restriction.minStay || 0,
+              maxStay: restriction.maxStay || 0
+            });
+            rateCount++;
+          });
+        });
+      }
+
+      batchIndex++;
+      setSyncProgress({ channelName: chName, current: end, total: SYNC_DAYS, phase: `Computing ARI... (${end}/${SYNC_DAYS} days)` });
+
+      if (end < SYNC_DAYS) {
+        setTimeout(processBatch, 0);
+      } else {
+        // Done — store payload summary on channel and persist restriction updates
+        const now = new Date().toISOString();
+        setLocalChannels(prev => prev.map(c => {
+          if (c.id !== ch.id) return c;
+          return {
+            ...c,
+            lastSync: now,
+            lastFullSyncStats: { date: now, days: SYNC_DAYS, rates: rateCount, restrictions: restrictionCount, stopSells: stopSellCount },
+            restrictionOverrides: chRestrictionOverrides,
+            // In production: ariPayload would be POSTed to Channex API here
+            // channex: { lastAriPush: now, payload: ariPayload }
+          };
+        }));
+        setChannelDirty(true);
+
+        const logEntry = {
+          id: 'log-' + Date.now(), timestamp: now, type: 'sync', channel: chName,
+          message: `Full sync completed — ${SYNC_DAYS} days ARI`,
+          details: `${rateCount} rates, ${restrictionCount} restrictions (${stopSellCount} stop sells), ${roomTypes.length} room types × ${ratePlans.length} rate plans. Auto-availability: ${ch.autoAvailability?.enabled ? 'applied' : 'off'}`
+        };
+        channelActivityLog.unshift(logEntry);
+        saveChannelActivityLog();
+        setSyncProgress(null);
+        setToastMessage(`Full sync: ${rateCount} rates + ${restrictionCount} restrictions pushed for ${chName} (${SYNC_DAYS} days)`);
+      }
+    };
+
+    setTimeout(processBatch, 0);
   };
 
   const toggleChannelStatus = (chId) => {
+    let wasConnected = false;
     setLocalChannels(prev => prev.map(ch => {
       if (ch.id !== chId) return ch;
-      const newStatus = ch.status === 'connected' ? 'disconnected' : 'connected';
+      wasConnected = ch.status === 'connected';
+      const newStatus = wasConnected ? 'disconnected' : 'connected';
       const logEntry = { id: 'log-' + Date.now(), timestamp: new Date().toISOString(), type: newStatus === 'connected' ? 'sync' : 'error', channel: ch.name, message: newStatus === 'connected' ? 'Channel connected' : 'Channel disconnected', details: '' };
       channelActivityLog.unshift(logEntry);
       saveChannelActivityLog();
       return { ...ch, status: newStatus, lastSync: newStatus === 'connected' ? new Date().toISOString() : ch.lastSync };
     }));
     setChannelDirty(true);
+    // Auto-trigger full sync when connecting a new channel
+    if (!wasConnected) setTimeout(() => triggerFullSync(chId), 100);
   };
 
   // ── Connection status ──────────────────────────────────────────────────
@@ -433,13 +539,38 @@ const ChannelManagerView = (props) => {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
       </button>
       <nav className="cal-nav">
-        <a className={`cal-nav-link${activePage === 'dashboard' ? ' active' : ''}`} onClick={() => { setActivePage('dashboard'); setSelectedReservation(null); }}><Icons.Calendar width="18" height="18" /><span>Reservations</span></a>
+        {canAccessPage(currentUser?.role, 'dashboard') && <a className={`cal-nav-link${activePage === 'dashboard' ? ' active' : ''}`} onClick={() => { setActivePage('dashboard'); setSelectedReservation(null); }}><Icons.Calendar width="18" height="18" /><span>Reservations</span></a>}
         <a className="cal-nav-link active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18"><circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/><line x1="10.5" y1="7.5" x2="6.5" y2="16.5"/><line x1="13.5" y1="7.5" x2="17.5" y2="16.5"/></svg><span>Channel manager</span></a>
-        <a className={`cal-nav-link${activePage === 'profiles' ? ' active' : ''}`} onClick={() => { setActivePage('profiles'); setSelectedReservation(null); }}><Icons.Users width="18" height="18" /><span>Profiles</span></a>
-        <a className={`cal-nav-link${activePage === 'payments' ? ' active' : ''}`} onClick={() => { setActivePage('payments'); setSelectedReservation(null); }}><Icons.CreditCard width="18" height="18" /><span>Payments</span></a>
-        <a className={`cal-nav-link${activePage === 'reports' ? ' active' : ''}`} onClick={() => { setActivePage('reports'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span>Reports</span></a>
-        <a className={`cal-nav-link${activePage === 'settings' ? ' active' : ''}`} onClick={() => { setActivePage('settings'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>Settings</span></a>
+        {canAccessPage(currentUser?.role, 'profiles') && <a className={`cal-nav-link${activePage === 'profiles' ? ' active' : ''}`} onClick={() => { setActivePage('profiles'); setSelectedReservation(null); }}><Icons.Users width="18" height="18" /><span>Profiles</span></a>}
+        {canAccessPage(currentUser?.role, 'payments') && <a className={`cal-nav-link${activePage === 'payments' ? ' active' : ''}`} onClick={() => { setActivePage('payments'); setSelectedReservation(null); }}><Icons.CreditCard width="18" height="18" /><span>Payments</span></a>}
+        {canAccessPage(currentUser?.role, 'reports') && <a className={`cal-nav-link${activePage === 'reports' ? ' active' : ''}`} onClick={() => { setActivePage('reports'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span>Reports</span></a>}
+        {canAccessPage(currentUser?.role, 'settings') && <a className={`cal-nav-link${activePage === 'settings' ? ' active' : ''}`} onClick={() => { setActivePage('settings'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>Settings</span></a>}
       </nav>
+      <div className="cal-nav-user">
+        <div className="relative">
+          <button onClick={() => props.setUserMenuOpen(prev => !prev)}
+            className={`flex items-center gap-2 w-full px-2 py-1.5 hover:bg-neutral-100 rounded-xl transition-colors ${sidebarCollapsed ? 'justify-center' : ''}`}>
+            <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0"
+              style={{ backgroundColor: currentUser?.color || '#6b7280' }}>
+              {currentUser?.name?.split(' ').map(n => n[0]).join('') || '?'}
+            </div>
+            {!sidebarCollapsed && <span className="text-xs text-neutral-600 truncate">{currentUser?.name?.split(' ')[0]}</span>}
+          </button>
+          {props.userMenuOpen && (<>
+            <div className="fixed inset-0 z-[49]" onClick={() => props.setUserMenuOpen(false)} />
+            <div className="absolute left-0 bottom-full mb-1 w-48 bg-white rounded-xl shadow-lg border border-neutral-200 py-1 z-[50]">
+              <div className="px-3 py-2 border-b border-neutral-100">
+                <div className="text-sm font-medium text-neutral-900">{currentUser?.name}</div>
+                <div className="text-[11px] text-neutral-400 capitalize">{currentUser?.role}</div>
+              </div>
+              <button onClick={props.handleLogout} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                Sign out
+              </button>
+            </div>
+          </>)}
+        </div>
+      </div>
       <div className="cal-nav-footer">{!sidebarCollapsed && (<>Rumo &copy;<br/>All Rights Reserved</>)}</div>
     </aside>
   );
@@ -478,8 +609,14 @@ const ChannelManagerView = (props) => {
           {/* Property info */}
           <div className="flex flex-wrap items-center gap-3 text-xs text-neutral-500">
             <span className="font-medium text-neutral-700">{hotelSettings.hotelName}</span>
-            <span>{hotelSettings.hotelAddress}</span>
+            <span>{getHotelAddress()}</span>
             <span>{hotelSettings.currency}</span>
+            {hotelSettings.autoClose?.enabled && (
+              <span className="flex items-center gap-1 px-2 py-0.5 bg-amber-50 text-amber-700 rounded-full text-[10px] font-medium">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="11" height="11"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                Stop sell {getStopSellTime()}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -819,7 +956,16 @@ const ChannelManagerView = (props) => {
                   </div>
                   <div className="text-xs text-neutral-400">
                     {ch.lastSync ? `Last sync: ${new Date(ch.lastSync).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : 'Never synced'}
+                    {ch.lastFullSyncStats && <span className="ml-2 text-neutral-300">({ch.lastFullSyncStats.rates} rates, {ch.lastFullSyncStats.days}d)</span>}
                   </div>
+                  {syncProgress?.channelName === ch.name && (
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <div className="flex-1 h-1.5 bg-neutral-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-neutral-900 rounded-full transition-all duration-300" style={{ width: `${Math.round(syncProgress.current / syncProgress.total * 100)}%` }} />
+                      </div>
+                      <span className="text-[10px] text-neutral-400 tabular-nums">{Math.round(syncProgress.current / syncProgress.total * 100)}%</span>
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -989,6 +1135,74 @@ const ChannelManagerView = (props) => {
                   )}
                 </div>
 
+                {/* Auto Close (Nachtelijke Afsluiting) */}
+                <div className="pt-3 border-t border-neutral-100">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-xs font-medium text-neutral-700">Auto Close</h4>
+                    <button onClick={() => {
+                      hotelSettings.autoClose = { ...(hotelSettings.autoClose || {}), enabled: !hotelSettings.autoClose?.enabled };
+                      if (!hotelSettings.autoClose.receptionCloseTime) hotelSettings.autoClose.receptionCloseTime = '22:00';
+                      if (!hotelSettings.autoClose.stopSellOffset) hotelSettings.autoClose.stopSellOffset = 30;
+                      saveHotelSettings();
+                      setToastMessage(hotelSettings.autoClose.enabled ? 'Auto Close enabled' : 'Auto Close disabled');
+                    }} className={`relative w-9 h-5 rounded-full transition-colors ${hotelSettings.autoClose?.enabled ? 'bg-emerald-500' : 'bg-neutral-300'}`}>
+                      <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${hotelSettings.autoClose?.enabled ? 'left-[18px]' : 'left-0.5'}`} />
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-neutral-400 mb-3">Automatically stop sell all room types before reception closes. In production this runs server-side; for now use "Apply Now".</p>
+                  {hotelSettings.autoClose?.enabled && (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1">
+                          <label className="block text-[10px] text-neutral-400 mb-1">Reception closes at</label>
+                          <input type="time" value={hotelSettings.autoClose?.receptionCloseTime || '22:00'}
+                            onChange={e => { hotelSettings.autoClose.receptionCloseTime = e.target.value; saveHotelSettings(); }}
+                            className="w-full px-2 py-1.5 border border-neutral-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-neutral-300" />
+                        </div>
+                        <div className="flex-1">
+                          <label className="block text-[10px] text-neutral-400 mb-1">Stop sell offset</label>
+                          <select value={hotelSettings.autoClose?.stopSellOffset || 30}
+                            onChange={e => { hotelSettings.autoClose.stopSellOffset = Number(e.target.value); saveHotelSettings(); }}
+                            className="w-full px-2 py-1.5 border border-neutral-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-neutral-300">
+                            <option value={15}>15 min before</option>
+                            <option value={30}>30 min before</option>
+                            <option value={45}>45 min before</option>
+                            <option value={60}>60 min before</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="#b45309" strokeWidth="2" width="14" height="14"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                          <span className="text-xs font-medium text-amber-800">Stop sell at {getStopSellTime()}</span>
+                        </div>
+                        <button onClick={() => {
+                          const today = new Date(); today.setHours(0,0,0,0);
+                          const ds = fmtDate(today);
+                          setLocalChannels(prev => prev.map(c => {
+                            if (c.status !== 'connected') return c;
+                            if (hotelSettings.autoClose?.applyToChannels !== 'all' && c.id !== ch.id) return c;
+                            const overrides = { ...(c.restrictionOverrides || {}) };
+                            roomTypes.forEach(rt => {
+                              const key = `${c.id}:${rt.id}:${ds}`;
+                              overrides[key] = { ...(overrides[key] || {}), stopSell: true };
+                            });
+                            return { ...c, restrictionOverrides: overrides };
+                          }));
+                          setChannelDirty(true);
+                          const logEntry = { id: 'log-' + Date.now(), timestamp: new Date().toISOString(), type: 'restriction', channel: ch.name, message: `Auto Close applied for today`, details: `Stop sell set for ${ds} on all room types` };
+                          channelActivityLog.unshift(logEntry);
+                          saveChannelActivityLog();
+                          setToastMessage(`Auto Close: stop sell applied for today. Save to persist.`);
+                        }}
+                          className="px-3 py-1.5 text-[11px] font-medium bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors">
+                          Apply Now
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {/* Actions */}
                 <div className="flex flex-wrap gap-2 pt-2 border-t border-neutral-200">
                   <button onClick={() => toggleChannelStatus(ch.id)}
@@ -996,8 +1210,9 @@ const ChannelManagerView = (props) => {
                     {ch.status === 'connected' ? 'Disconnect' : 'Connect'}
                   </button>
                   {ch.status === 'connected' && (
-                    <button onClick={() => triggerFullSync(ch.name)} className="px-3 py-2 text-xs font-medium border border-neutral-200 text-neutral-600 rounded-xl hover:bg-neutral-50 transition-colors">
-                      Full Sync
+                    <button onClick={() => triggerFullSync(ch.id)} disabled={!!syncProgress}
+                      className={`px-3 py-2 text-xs font-medium border border-neutral-200 text-neutral-600 rounded-xl transition-colors ${syncProgress ? 'opacity-50 cursor-not-allowed' : 'hover:bg-neutral-50'}`}>
+                      {syncProgress?.channelName === ch.name ? syncProgress.phase : 'Full Sync'}
                     </button>
                   )}
                   {ch.status === 'connected' && (

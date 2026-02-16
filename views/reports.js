@@ -281,7 +281,7 @@ const ReportsView = (props) => {
 
       const selectClass = "px-2 py-1.5 border border-neutral-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-neutral-300 text-neutral-700";
       const inputClass = "px-2 py-1.5 border border-neutral-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-neutral-300 text-neutral-700 w-full";
-      const checkClass = "flex items-center gap-1.5 text-xs text-neutral-600 cursor-pointer select-none hover:text-neutral-900 transition-colors";
+
 
       return (
         <div className="space-y-4">
@@ -366,25 +366,27 @@ const ReportsView = (props) => {
                   <label className="block text-[10px] text-neutral-400 uppercase tracking-wider mb-1">Max price</label>
                   <input type="number" value={fPriceMax} onChange={e => setFPriceMax(e.target.value)} placeholder={'€ 9999'} className={inputClass} />
                 </div>
-                {/* Checkboxes — auto-trigger search */}
-                <div className="flex flex-col gap-2 justify-center col-span-2">
-                  <label className={checkClass}>
-                    <input type="checkbox" checked={fOutstanding} onChange={e => { setFOutstanding(e.target.checked); setHasSearched(true); }} className="rounded border-neutral-300" />
-                    Outstanding balance only
-                  </label>
-                  <label className={checkClass}>
-                    <input type="checkbox" checked={fNoInvoice} onChange={e => { setFNoInvoice(e.target.checked); setHasSearched(true); }} className="rounded border-neutral-300" />
-                    No invoice created
-                  </label>
-                  <label className={checkClass}>
-                    <input type="checkbox" checked={fUnlinkedPayments} onChange={e => { setFUnlinkedPayments(e.target.checked); setHasSearched(true); }} className="rounded border-neutral-300" />
-                    Unlinked payments
-                  </label>
-                </div>
+              </div>
+
+              {/* Quick filters */}
+              <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-neutral-100">
+                <span className="text-[10px] text-neutral-400 uppercase tracking-wider mr-1">Quick filters</span>
+                <label className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs cursor-pointer transition-colors ${fOutstanding ? 'bg-neutral-900 text-white' : 'bg-neutral-100 text-neutral-500 hover:bg-neutral-200'}`}>
+                  <input type="checkbox" checked={fOutstanding} onChange={e => { setFOutstanding(e.target.checked); setHasSearched(true); }} className="sr-only" />
+                  Outstanding balance
+                </label>
+                <label className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs cursor-pointer transition-colors ${fNoInvoice ? 'bg-neutral-900 text-white' : 'bg-neutral-100 text-neutral-500 hover:bg-neutral-200'}`}>
+                  <input type="checkbox" checked={fNoInvoice} onChange={e => { setFNoInvoice(e.target.checked); setHasSearched(true); }} className="sr-only" />
+                  No invoice
+                </label>
+                <label className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs cursor-pointer transition-colors ${fUnlinkedPayments ? 'bg-neutral-900 text-white' : 'bg-neutral-100 text-neutral-500 hover:bg-neutral-200'}`}>
+                  <input type="checkbox" checked={fUnlinkedPayments} onChange={e => { setFUnlinkedPayments(e.target.checked); setHasSearched(true); }} className="sr-only" />
+                  Unlinked payments
+                </label>
               </div>
 
               {/* Search + Save + Clear buttons */}
-              <div className="flex items-center justify-between mt-4 pt-3 border-t border-neutral-100">
+              <div className="flex items-center justify-between mt-3 pt-3 border-t border-neutral-100">
                 <div className="flex items-center gap-2">
                   <button onClick={() => setHasSearched(true)}
                     className="flex items-center gap-2 px-5 py-2 bg-neutral-900 text-white rounded-xl text-xs font-medium hover:bg-neutral-800 transition-colors">
@@ -463,8 +465,8 @@ const ReportsView = (props) => {
               )}
 
               {/* Table */}
-              <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden">
-                <table className="w-full text-sm">
+              <div className="bg-white border border-neutral-200 rounded-2xl overflow-x-auto">
+                <table className="w-full text-sm min-w-[700px]">
                   <thead>
                     <tr className="border-b border-neutral-100 bg-neutral-50">
                       <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider cursor-pointer hover:text-neutral-700" onClick={() => toggleSort('checkin')}>
@@ -571,11 +573,11 @@ const ReportsView = (props) => {
           </div>
 
           {/* Revenue by Room Type */}
-          <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden">
+          <div className="bg-white border border-neutral-200 rounded-2xl overflow-x-auto">
             <div className="px-5 py-4 border-b border-neutral-100">
               <h3 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Revenue by Room Type</h3>
             </div>
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[500px]">
               <thead><tr className="border-b border-neutral-100 bg-neutral-50">
                 <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase">Room Type</th>
                 <th className="px-5 py-3 text-right text-xs font-semibold text-neutral-500 uppercase">Bookings</th>
@@ -598,11 +600,11 @@ const ReportsView = (props) => {
           </div>
 
           {/* Revenue by Channel */}
-          <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden">
+          <div className="bg-white border border-neutral-200 rounded-2xl overflow-x-auto">
             <div className="px-5 py-4 border-b border-neutral-100">
               <h3 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Revenue by Channel</h3>
             </div>
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[400px]">
               <thead><tr className="border-b border-neutral-100 bg-neutral-50">
                 <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase">Channel</th>
                 <th className="px-5 py-3 text-right text-xs font-semibold text-neutral-500 uppercase">Bookings</th>
@@ -664,8 +666,8 @@ const ReportsView = (props) => {
           </div>
 
           {/* Debtors Table */}
-          <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden">
-            <table className="w-full text-sm">
+          <div className="bg-white border border-neutral-200 rounded-2xl overflow-x-auto">
+            <table className="w-full text-sm min-w-[700px]">
               <thead>
                 <tr className="border-b border-neutral-100 bg-neutral-50">
                   <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">Booking Ref</th>
@@ -785,11 +787,11 @@ const ReportsView = (props) => {
           </div>
 
           {/* Occupancy by Room Type */}
-          <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden">
+          <div className="bg-white border border-neutral-200 rounded-2xl overflow-x-auto">
             <div className="px-5 py-4 border-b border-neutral-100">
               <h3 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Occupancy by Room Type</h3>
             </div>
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[500px]">
               <thead><tr className="border-b border-neutral-100 bg-neutral-50">
                 <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase">Room Type</th>
                 <th className="px-5 py-3 text-right text-xs font-semibold text-neutral-500 uppercase">Rooms</th>
@@ -866,11 +868,11 @@ const ReportsView = (props) => {
             </div>
           </div>
 
-          <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden">
+          <div className="bg-white border border-neutral-200 rounded-2xl overflow-x-auto">
             <div className="px-5 py-4 border-b border-neutral-100">
               <h3 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Guest Nationality Breakdown</h3>
             </div>
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[400px]">
               <thead><tr className="border-b border-neutral-100 bg-neutral-50">
                 <th className="px-5 py-3 text-left text-xs font-semibold text-neutral-500 uppercase">Country</th>
                 <th className="px-5 py-3 text-right text-xs font-semibold text-neutral-500 uppercase">Guests</th>
@@ -907,13 +909,38 @@ const ReportsView = (props) => {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
         </button>
         <nav className="cal-nav">
-          <a className="cal-nav-link" onClick={() => { setActivePage('dashboard'); setSelectedReservation(null); }}><Icons.Calendar width="18" height="18" /><span>Reservations</span></a>
-          <a className={`cal-nav-link${activePage === 'channelmanager' ? ' active' : ''}`} onClick={() => { setActivePage('channelmanager'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18"><circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/><line x1="10.5" y1="7.5" x2="6.5" y2="16.5"/><line x1="13.5" y1="7.5" x2="17.5" y2="16.5"/></svg><span>Channel manager</span></a>
-          <a className={`cal-nav-link${activePage === 'profiles' ? ' active' : ''}`} onClick={() => { setActivePage('profiles'); setSelectedReservation(null); }}><Icons.Users width="18" height="18" /><span>Profiles</span></a>
-          <a className={`cal-nav-link${activePage === 'payments' ? ' active' : ''}`} onClick={() => { setActivePage('payments'); setSelectedReservation(null); }}><Icons.CreditCard width="18" height="18" /><span>Payments</span></a>
+          {canAccessPage(currentUser?.role, 'dashboard') && <a className="cal-nav-link" onClick={() => { setActivePage('dashboard'); setSelectedReservation(null); }}><Icons.Calendar width="18" height="18" /><span>Reservations</span></a>}
+          {canAccessPage(currentUser?.role, 'channelmanager') && <a className={`cal-nav-link${activePage === 'channelmanager' ? ' active' : ''}`} onClick={() => { setActivePage('channelmanager'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18"><circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/><line x1="10.5" y1="7.5" x2="6.5" y2="16.5"/><line x1="13.5" y1="7.5" x2="17.5" y2="16.5"/></svg><span>Channel manager</span></a>}
+          {canAccessPage(currentUser?.role, 'profiles') && <a className={`cal-nav-link${activePage === 'profiles' ? ' active' : ''}`} onClick={() => { setActivePage('profiles'); setSelectedReservation(null); }}><Icons.Users width="18" height="18" /><span>Profiles</span></a>}
+          {canAccessPage(currentUser?.role, 'payments') && <a className={`cal-nav-link${activePage === 'payments' ? ' active' : ''}`} onClick={() => { setActivePage('payments'); setSelectedReservation(null); }}><Icons.CreditCard width="18" height="18" /><span>Payments</span></a>}
           <a className="cal-nav-link active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span>Reports</span></a>
-          <a className={`cal-nav-link${activePage === 'settings' ? ' active' : ''}`} onClick={() => { setActivePage('settings'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>Settings</span></a>
+          {canAccessPage(currentUser?.role, 'settings') && <a className={`cal-nav-link${activePage === 'settings' ? ' active' : ''}`} onClick={() => { setActivePage('settings'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>Settings</span></a>}
         </nav>
+        <div className="cal-nav-user">
+          <div className="relative">
+            <button onClick={() => props.setUserMenuOpen(prev => !prev)}
+              className={`flex items-center gap-2 w-full px-2 py-1.5 hover:bg-neutral-100 rounded-xl transition-colors ${sidebarCollapsed ? 'justify-center' : ''}`}>
+              <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0"
+                style={{ backgroundColor: currentUser?.color || '#6b7280' }}>
+                {currentUser?.name?.split(' ').map(n => n[0]).join('') || '?'}
+              </div>
+              {!sidebarCollapsed && <span className="text-xs text-neutral-600 truncate">{currentUser?.name?.split(' ')[0]}</span>}
+            </button>
+            {props.userMenuOpen && (<>
+              <div className="fixed inset-0 z-[49]" onClick={() => props.setUserMenuOpen(false)} />
+              <div className="absolute left-0 bottom-full mb-1 w-48 bg-white rounded-xl shadow-lg border border-neutral-200 py-1 z-[50]">
+                <div className="px-3 py-2 border-b border-neutral-100">
+                  <div className="text-sm font-medium text-neutral-900">{currentUser?.name}</div>
+                  <div className="text-[11px] text-neutral-400 capitalize">{currentUser?.role}</div>
+                </div>
+                <button onClick={props.handleLogout} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                  Sign out
+                </button>
+              </div>
+            </>)}
+          </div>
+        </div>
         <div className="cal-nav-footer">{!sidebarCollapsed && (<>Rumo &copy;<br/>All Rights Reserved</>)}</div>
       </aside>
     );

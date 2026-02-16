@@ -364,7 +364,7 @@ const NewReservationModal = (props) => {
                   payments: [],
                   optionExpiry: null,
                   invoices: [],
-                  activityLog: [{ id: 1, timestamp: Date.now(), action: 'Reservation created', user: 'Sophie' }],
+                  activityLog: [{ id: 1, timestamp: Date.now(), action: 'Reservation created', user: currentUser?.name || 'System' }],
                   reminders: []
                 };
 
