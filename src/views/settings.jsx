@@ -1,31 +1,42 @@
+import React, { useState } from 'react';
+import globals from '../globals.js';
+import Icons from '../icons.jsx';
+import {
+  canAccessPage, saveHotelSettings, saveRoomTypes, saveRatePlans,
+  saveCancellationPolicies, saveExtrasCatalog, saveVatRates,
+  saveHotelUsers, saveEmailTemplates,
+} from '../config.js';
+import { syncConfig } from '../supabase.js';
+import { resolveTemplateVariables, buildEmailHtml, htmlToPlaintext } from '../components/emailengine.js';
+
 // ── Settings View ────────────────────────────────────────────────────────────
 const SettingsView = (props) => {
   const { setToastMessage, sidebarCollapsed, setSidebarCollapsed, activePage, setActivePage, setSelectedReservation, currentUser } = props;
 
   const [settingsTab, setSettingsTab] = useState('general');
-  const [localSettings, setLocalSettings] = useState(() => JSON.parse(JSON.stringify(hotelSettings)));
-  const [localRoomTypes, setLocalRoomTypes] = useState(() => JSON.parse(JSON.stringify(roomTypes)));
-  const [localRatePlans, setLocalRatePlans] = useState(() => JSON.parse(JSON.stringify(ratePlans)));
-  const [localPolicies, setLocalPolicies] = useState(() => JSON.parse(JSON.stringify(cancellationPolicies)));
-  const [localExtras, setLocalExtras] = useState(() => JSON.parse(JSON.stringify(extrasCatalog)));
-  const [localVatRates, setLocalVatRates] = useState(() => JSON.parse(JSON.stringify(vatRates)));
-  const [localUsers, setLocalUsers] = useState(() => JSON.parse(JSON.stringify(hotelUsers)));
+  const [localSettings, setLocalSettings] = useState(() => JSON.parse(JSON.stringify(globals.hotelSettings)));
+  const [localRoomTypes, setLocalRoomTypes] = useState(() => JSON.parse(JSON.stringify(globals.roomTypes)));
+  const [localRatePlans, setLocalRatePlans] = useState(() => JSON.parse(JSON.stringify(globals.ratePlans)));
+  const [localPolicies, setLocalPolicies] = useState(() => JSON.parse(JSON.stringify(globals.cancellationPolicies)));
+  const [localExtras, setLocalExtras] = useState(() => JSON.parse(JSON.stringify(globals.extrasCatalog)));
+  const [localVatRates, setLocalVatRates] = useState(() => JSON.parse(JSON.stringify(globals.vatRates)));
+  const [localUsers, setLocalUsers] = useState(() => JSON.parse(JSON.stringify(globals.hotelUsers)));
   const [dirty, setDirty] = useState(false);
   const [dragIdx, setDragIdx] = useState(null);
   const [dragOverIdx, setDragOverIdx] = useState(null);
   const [removeWarning, setRemoveWarning] = useState(null);
   // Email template editor state
-  const [localTemplates, setLocalTemplates] = useState(() => JSON.parse(JSON.stringify(emailTemplates)));
+  const [localTemplates, setLocalTemplates] = useState(() => JSON.parse(JSON.stringify(globals.emailTemplates)));
   const [editingTemplate, setEditingTemplate] = useState(null);
   const [templateEditorTab, setTemplateEditorTab] = useState('preview');
   const [emailPreviewHtml, setEmailPreviewHtml] = useState(null);
 
   // Helper: count active reservations for a room number
   const getReservationCountForRoom = (roomNumber) =>
-    reservations.filter(r => r.rooms?.some(rm => rm.roomNumber === roomNumber)).length;
+    globals.reservations.filter(r => r.rooms?.some(rm => rm.roomNumber === roomNumber)).length;
 
   const getReservationCountForRooms = (roomNumbers) =>
-    reservations.filter(r => r.rooms?.some(rm => roomNumbers.includes(rm.roomNumber))).length;
+    globals.reservations.filter(r => r.rooms?.some(rm => roomNumbers.includes(rm.roomNumber))).length;
 
   // Check if any price schedule periods overlap within a single extra
   const getOverlappingPeriods = (schedule) => {
@@ -51,25 +62,25 @@ const SettingsView = (props) => {
       setToastMessage('Fix overlapping price schedule periods before saving');
       return;
     }
-    Object.assign(hotelSettings, localSettings);
-    saveHotelSettings(); syncConfig('hotelSettings', hotelSettings);
-    roomTypes.length = 0; localRoomTypes.forEach(rt => roomTypes.push(rt));
-    saveRoomTypes(); syncConfig('roomTypes', roomTypes);
-    ratePlans.length = 0; localRatePlans.forEach(rp => ratePlans.push(rp));
-    saveRatePlans(); syncConfig('ratePlans', ratePlans);
-    cancellationPolicies.length = 0; localPolicies.forEach(cp => cancellationPolicies.push(cp));
-    saveCancellationPolicies(); syncConfig('cancellationPolicies', cancellationPolicies);
-    extrasCatalog.length = 0; localExtras.forEach(ex => extrasCatalog.push(ex));
-    saveExtrasCatalog(); syncConfig('extrasCatalog', extrasCatalog);
-    vatRates.length = 0; localVatRates.forEach(vr => vatRates.push(vr));
-    saveVatRates(); syncConfig('vatRates', vatRates);
+    Object.assign(globals.hotelSettings, localSettings);
+    saveHotelSettings(); syncConfig('hotelSettings', globals.hotelSettings);
+    globals.roomTypes.length = 0; localRoomTypes.forEach(rt => globals.roomTypes.push(rt));
+    saveRoomTypes(); syncConfig('roomTypes', globals.roomTypes);
+    globals.ratePlans.length = 0; localRatePlans.forEach(rp => globals.ratePlans.push(rp));
+    saveRatePlans(); syncConfig('ratePlans', globals.ratePlans);
+    globals.cancellationPolicies.length = 0; localPolicies.forEach(cp => globals.cancellationPolicies.push(cp));
+    saveCancellationPolicies(); syncConfig('cancellationPolicies', globals.cancellationPolicies);
+    globals.extrasCatalog.length = 0; localExtras.forEach(ex => globals.extrasCatalog.push(ex));
+    saveExtrasCatalog(); syncConfig('extrasCatalog', globals.extrasCatalog);
+    globals.vatRates.length = 0; localVatRates.forEach(vr => globals.vatRates.push(vr));
+    saveVatRates(); syncConfig('vatRates', globals.vatRates);
     // Users
     const activeAdmins = localUsers.filter(u => u.active && u.role === 'admin');
     if (activeAdmins.length === 0) { setToastMessage('At least one active admin is required'); return; }
     const badPin = localUsers.find(u => u.active && u.pin.length < 4);
     if (badPin) { setToastMessage(`PIN for ${badPin.name || 'new user'} must be at least 4 digits`); return; }
-    hotelUsers.length = 0; localUsers.forEach(u => hotelUsers.push(u));
-    saveHotelUsers(); syncConfig('hotelUsers', hotelUsers);
+    globals.hotelUsers.length = 0; localUsers.forEach(u => globals.hotelUsers.push(u));
+    saveHotelUsers(); syncConfig('hotelUsers', globals.hotelUsers);
     setDirty(false);
     setToastMessage('Settings saved');
   };
@@ -294,7 +305,7 @@ const SettingsView = (props) => {
                           <button onClick={() => {
                             setLocalVatRates(prev => { const next = JSON.parse(JSON.stringify(prev)); next[vi].schedule.splice(si, 1); return next; });
                             setDirty(true);
-                          }} className="text-neutral-300 hover:text-red-500 text-xs ml-1">×</button>
+                          }} className="text-neutral-300 hover:text-red-500 text-xs ml-1">&times;</button>
                         </div>
                       </td>
                     </tr>
@@ -537,8 +548,8 @@ const SettingsView = (props) => {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                 <div><label className={labelClass}>Name</label><input value={rt.name} onChange={e => updateRoomType(i, 'name', e.target.value)} className={inputClass} /></div>
                 <div><label className={labelClass}>Code</label><input value={rt.shortCode} onChange={e => updateRoomType(i, 'shortCode', e.target.value)} className={inputClass} /></div>
-                <div><label className={labelClass}>Base Rate (€)</label><input type="number" value={rt.defaultRate} onChange={e => updateRoomType(i, 'defaultRate', e.target.value)} className={inputClass} /></div>
-                <div><label className={labelClass}>Extra Person (€)</label><input type="number" value={rt.extraPersonSupplement} onChange={e => updateRoomType(i, 'extraPersonSupplement', e.target.value)} className={inputClass} /></div>
+                <div><label className={labelClass}>Base Rate (&euro;)</label><input type="number" value={rt.defaultRate} onChange={e => updateRoomType(i, 'defaultRate', e.target.value)} className={inputClass} /></div>
+                <div><label className={labelClass}>Extra Person (&euro;)</label><input type="number" value={rt.extraPersonSupplement} onChange={e => updateRoomType(i, 'extraPersonSupplement', e.target.value)} className={inputClass} /></div>
                 <div><label className={labelClass}>Base Occupancy</label><input type="number" value={rt.baseOccupancy} onChange={e => updateRoomType(i, 'baseOccupancy', e.target.value)} className={inputClass} /></div>
                 <div><label className={labelClass}>Max Occupancy</label><input type="number" value={rt.maxOccupancy} onChange={e => updateRoomType(i, 'maxOccupancy', e.target.value)} className={inputClass} /></div>
               </div>
@@ -556,7 +567,7 @@ const SettingsView = (props) => {
                           setLocalRoomTypes(prev => { const next = [...prev]; next[i] = { ...next[i], rooms: next[i].rooms.filter((_, idx) => idx !== ri) }; return next; });
                           setDirty(true);
                         }
-                      }} className="text-neutral-400 hover:text-red-500 ml-0.5">×</button>
+                      }} className="text-neutral-400 hover:text-red-500 ml-0.5">&times;</button>
                     </span>
                   ))}
                   <div className="relative inline-flex items-center">
@@ -601,7 +612,7 @@ const SettingsView = (props) => {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div><label className={labelClass}>Name</label><input value={rp.name} onChange={e => updateRatePlan(i, 'name', e.target.value)} className={inputClass} /></div>
                 <div><label className={labelClass}>Code</label><input value={rp.shortCode} onChange={e => updateRatePlan(i, 'shortCode', e.target.value)} className={inputClass} /></div>
-                <div><label className={labelClass}>± Base Rate (€)</label><input type="number" value={rp.priceModifier} onChange={e => updateRatePlan(i, 'priceModifier', e.target.value)} className={inputClass} /></div>
+                <div><label className={labelClass}>&plusmn; Base Rate (&euro;)</label><input type="number" value={rp.priceModifier} onChange={e => updateRatePlan(i, 'priceModifier', e.target.value)} className={inputClass} /></div>
                 <div><label className={labelClass}>Cancellation Policy</label>
                   <select value={rp.cancellationPolicyId} onChange={e => updateRatePlan(i, 'cancellationPolicyId', e.target.value)} className={inputClass}>
                     {localPolicies.map(cp => <option key={cp.id} value={cp.id}>{cp.name}</option>)}
@@ -783,7 +794,7 @@ const SettingsView = (props) => {
                       <button onClick={() => {
                         setLocalExtras(prev => { const next = JSON.parse(JSON.stringify(prev)); next[i].priceSchedule.splice(pi, 1); return next; });
                         setDirty(true);
-                      }} className="text-neutral-400 hover:text-red-500 text-xs px-1">×</button>
+                      }} className="text-neutral-400 hover:text-red-500 text-xs px-1">&times;</button>
                       {isOverlap && <span className="text-red-500 text-xs">Overlap</span>}
                     </div>
                     );
@@ -1143,7 +1154,7 @@ const SettingsView = (props) => {
               <div>
                 <div className="border border-neutral-200 rounded-xl overflow-hidden">
                   <iframe
-                    srcDoc={resolveTemplateVariables(editingTemplate.bodyHtml || '', reservations[0] || {
+                    srcDoc={resolveTemplateVariables(editingTemplate.bodyHtml || '', globals.reservations[0] || {
                       booker: { firstName: 'John', lastName: 'Doe', email: 'john@example.com' },
                       rooms: [{ checkin: '2026-03-15', checkout: '2026-03-18', roomType: 'Deluxe Double', roomNumber: '201', nightPrices: [{amount: 150}, {amount: 150}, {amount: 150}], guests: [{ firstName: 'John', lastName: 'Doe' }] }],
                       bookingRef: 'RMO-00001', extras: [], payments: [], invoices: [],
@@ -1214,11 +1225,11 @@ const SettingsView = (props) => {
             <div className="flex items-center justify-between mt-4 pt-4 border-t border-neutral-100">
               <div className="flex gap-2">
                 <button onClick={() => {
-                  setEmailPreviewHtml(resolveTemplateVariables(editingTemplate.bodyHtml, reservations[0] || {}));
+                  setEmailPreviewHtml(resolveTemplateVariables(editingTemplate.bodyHtml, globals.reservations[0] || {}));
                 }} className="px-3 py-1.5 text-xs font-medium text-neutral-600 bg-neutral-100 hover:bg-neutral-200 rounded-lg transition-colors">
                   Preview
                 </button>
-                <button onClick={() => setToastMessage(`Test email would be sent to ${hotelSettings.hotelEmail}`)}
+                <button onClick={() => setToastMessage(`Test email would be sent to ${globals.hotelSettings.hotelEmail}`)}
                   className="px-3 py-1.5 text-xs font-medium text-neutral-600 bg-neutral-100 hover:bg-neutral-200 rounded-lg transition-colors">
                   Send Test
                 </button>
@@ -1235,8 +1246,8 @@ const SettingsView = (props) => {
                     next[idx] = { ...editingTemplate, updatedAt: Date.now() };
                     setLocalTemplates(next);
                   }
-                  emailTemplates.length = 0;
-                  emailTemplates.push(...(idx !== -1 ? localTemplates.map((t, i) => i === idx ? { ...editingTemplate, updatedAt: Date.now() } : t) : localTemplates));
+                  globals.emailTemplates.length = 0;
+                  globals.emailTemplates.push(...(idx !== -1 ? localTemplates.map((t, i) => i === idx ? { ...editingTemplate, updatedAt: Date.now() } : t) : localTemplates));
                   saveEmailTemplates();
                   setToastMessage('Template saved');
                   setEditingTemplate(null);
@@ -1273,7 +1284,7 @@ const SettingsView = (props) => {
                       const next = [...localTemplates];
                       next[i] = { ...next[i], active: !next[i].active };
                       setLocalTemplates(next);
-                      emailTemplates.length = 0; emailTemplates.push(...next); saveEmailTemplates();
+                      globals.emailTemplates.length = 0; globals.emailTemplates.push(...next); saveEmailTemplates();
                     }} className={`relative w-8 rounded-full transition-colors ${tpl.active ? 'bg-emerald-500' : 'bg-neutral-300'}`} style={{width: 32, height: 18}}>
                       <span className="absolute top-0.5 bg-white rounded-full shadow" style={{width: 14, height: 14, left: tpl.active ? 16 : 2, transition: 'left 200ms'}} />
                     </button>
@@ -1286,7 +1297,7 @@ const SettingsView = (props) => {
                         if (!confirm(`Delete template "${tpl.name}"?`)) return;
                         const next = localTemplates.filter(t => t.id !== tpl.id);
                         setLocalTemplates(next);
-                        emailTemplates.length = 0; emailTemplates.push(...next); saveEmailTemplates();
+                        globals.emailTemplates.length = 0; globals.emailTemplates.push(...next); saveEmailTemplates();
                         if (editingTemplate?.id === tpl.id) setEditingTemplate(null);
                         setToastMessage('Template deleted');
                       }}
@@ -1407,3 +1418,5 @@ const SettingsView = (props) => {
     </div>
   );
 };
+
+export default SettingsView;

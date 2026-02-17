@@ -1,3 +1,16 @@
+import React, { useState, useRef } from 'react';
+import globals from '../globals.js';
+import Icons from '../icons.jsx';
+import { formatDate } from '../utils.js';
+import { canAccessPage, getExtraPrice } from '../config.js';
+import { saveReservationSingle } from '../supabase.js';
+import { resolveTemplateVariables } from '../components/emailengine.js';
+import EmailPreviewModal from '../components/emailpreview.jsx';
+import DetailOverviewTab from './detail-overview.jsx';
+import DetailRoomsTab from './detail-rooms.jsx';
+import DetailBillingTab from './detail-billing.jsx';
+import DetailMessagesTab from './detail-messages.jsx';
+
 // -- Reservation Detail View --------------------------------------------------
 const ReservationDetailView = (props) => {
   const {
@@ -21,11 +34,11 @@ const ReservationDetailView = (props) => {
   const reservation = selectedReservation;
   const ed = editingReservation;
   if (!reservation || !ed) return null;
-  const [pricingOpen, setPricingOpen] = React.useState({});
-  const [inventoryPopup, setInventoryPopup] = React.useState(null); // { catName, nights: [{ date, label, used, limit, full }], qty, cat, ci, co }
-  const [inventorySelected, setInventorySelected] = React.useState(new Set()); // selected night indices
-  const inventoryPendingRef = React.useRef(false); // guard against select double-fire
-  const [confirmBTPayment, setConfirmBTPayment] = React.useState(null); // payment id for bank transfer confirm popup
+  const [pricingOpen, setPricingOpen] = useState({});
+  const [inventoryPopup, setInventoryPopup] = useState(null); // { catName, nights: [{ date, label, used, limit, full }], qty, cat, ci, co }
+  const [inventorySelected, setInventorySelected] = useState(new Set()); // selected night indices
+  const inventoryPendingRef = useRef(false); // guard against select double-fire
+  const [confirmBTPayment, setConfirmBTPayment] = useState(null); // payment id for bank transfer confirm popup
 
   const pageLabels = { dashboard: 'Dashboard', calendar: 'Calendar', housekeeping: 'Housekeeping', fb: 'F&B', reports: 'Reports' };
   const edCheckin = ed.checkin ? new Date(ed.checkin) : reservation.checkin;
@@ -41,7 +54,7 @@ const ReservationDetailView = (props) => {
   const nightsLabel = minNights === maxNights ? `${nightCount} night${nightCount > 1 ? 's' : ''}` : `${minNights}—${maxNights} nights`;
   const roomRatePlanIds = (ed.rooms || []).map(r => r.ratePlanId).filter(Boolean);
   const allSameRatePlan = roomRatePlanIds.length > 0 && roomRatePlanIds.every(id => id === roomRatePlanIds[0]);
-  const commonRatePlanName = allSameRatePlan ? (ratePlans.find(rp => rp.id === roomRatePlanIds[0])?.name || '') : '';
+  const commonRatePlanName = allSameRatePlan ? (globals.ratePlans.find(rp => rp.id === roomRatePlanIds[0])?.name || '') : '';
 
   const goBack = () => {
     setSelectedReservation(null);
@@ -53,7 +66,7 @@ const ReservationDetailView = (props) => {
   const searchTransferTargets = (query) => {
     if (!query || query.length < 2) return [];
     const q = query.toLowerCase();
-    return reservations.filter(r =>
+    return globals.reservations.filter(r =>
       r.id !== ed.id && (
         (r.bookingRef && r.bookingRef.toLowerCase().includes(q)) ||
         (r.otaRef && r.otaRef.toLowerCase().includes(q)) ||
@@ -89,7 +102,7 @@ const ReservationDetailView = (props) => {
     });
     if (linked > 0) {
       const total = billTransferSelected.reduce((s, payId) => { const p = next.payments.find(pp => pp.id === payId); return s + (p ? p.amount : 0); }, 0);
-      next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `${linked} payment(s) (EUR ${total.toFixed(2)}) linked to ${inv.number}`, user: currentUser?.name || 'System' });
+      next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `${linked} payment(s) (EUR ${total.toFixed(2)}) linked to ${inv.number}`, user: globals.currentUser?.name || 'System' });
       setEditingReservation(next);
       setToastMessage(`${linked} payment(s) linked to ${inv.number}`);
     }
@@ -98,11 +111,11 @@ const ReservationDetailView = (props) => {
 
   const executeTransfer = () => {
     if (!billTransferTarget || billTransferSelected.length === 0) return;
-    const targetIdx = reservations.findIndex(r => r.id === billTransferTarget.id);
+    const targetIdx = globals.reservations.findIndex(r => r.id === billTransferTarget.id);
     if (targetIdx === -1) { setToastMessage('Target reservation not found'); return; }
 
     const next = JSON.parse(JSON.stringify(ed));
-    const target = JSON.parse(JSON.stringify(reservations[targetIdx]));
+    const target = JSON.parse(JSON.stringify(globals.reservations[targetIdx]));
 
     if (billTransferMode === 'items') {
       const extrasToMove = [];
@@ -117,9 +130,9 @@ const ReservationDetailView = (props) => {
       });
       const names = extrasToMove.map(ex => ex.name).join(', ');
       const total = extrasToMove.reduce((s, ex) => s + (ex.quantity || 0) * (ex.unitPrice || 0), 0);
-      next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Transferred ${extrasToMove.length} item(s) to ${target.bookingRef}: ${names} (EUR ${total.toFixed(2)})`, user: currentUser?.name || 'System' });
+      next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Transferred ${extrasToMove.length} item(s) to ${target.bookingRef}: ${names} (EUR ${total.toFixed(2)})`, user: globals.currentUser?.name || 'System' });
       target.activityLog = target.activityLog || [];
-      target.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Received ${extrasToMove.length} item(s) from ${next.bookingRef}: ${names} (EUR ${total.toFixed(2)})`, user: currentUser?.name || 'System' });
+      target.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Received ${extrasToMove.length} item(s) from ${next.bookingRef}: ${names} (EUR ${total.toFixed(2)})`, user: globals.currentUser?.name || 'System' });
       setToastMessage(`${extrasToMove.length} item(s) transferred to ${target.bookingRef}`);
 
     } else if (billTransferMode === 'payments') {
@@ -138,14 +151,14 @@ const ReservationDetailView = (props) => {
         target.payments.push({ ...p, id: Date.now() + Math.floor(Math.random() * 10000) });
       });
       const total = paymentsToMove.reduce((s, p) => s + p.amount, 0);
-      next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Transferred ${paymentsToMove.length} payment(s) to ${target.bookingRef} (EUR ${total.toFixed(2)})`, user: currentUser?.name || 'System' });
+      next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Transferred ${paymentsToMove.length} payment(s) to ${target.bookingRef} (EUR ${total.toFixed(2)})`, user: globals.currentUser?.name || 'System' });
       target.activityLog = target.activityLog || [];
-      target.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Received ${paymentsToMove.length} payment(s) from ${next.bookingRef} (EUR ${total.toFixed(2)})`, user: currentUser?.name || 'System' });
+      target.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Received ${paymentsToMove.length} payment(s) from ${next.bookingRef} (EUR ${total.toFixed(2)})`, user: globals.currentUser?.name || 'System' });
       setToastMessage(`${paymentsToMove.length} payment(s) transferred to ${target.bookingRef}`);
     }
 
     // Save target directly
-    reservations[targetIdx] = target;
+    globals.reservations[targetIdx] = target;
     saveReservationSingle(target);
     // Update source via editingReservation (auto-save picks it up)
     setEditingReservation(next);
@@ -170,7 +183,7 @@ const ReservationDetailView = (props) => {
 
   // Helper: build extraData for an invoice email
   const buildInvoiceExtraData = (inv) => {
-    const currency = hotelSettings.currency || 'EUR';
+    const currency = globals.hotelSettings.currency || 'EUR';
     const lines = (inv.items || []).map(item =>
       `${item.label}${item.detail ? ' — ' + item.detail : ''}: ${currency} ${item.amount.toFixed(2)}`
     ).join('\n');
@@ -206,7 +219,7 @@ const ReservationDetailView = (props) => {
   // Helper: add a catalog extra (handles auto-qty, inventory check, etc.)
   const addCatalogExtra = (catName, overrideQty) => {
     if (inventoryPendingRef.current) return;
-    const cat = extrasCatalog.find(c => c.name === catName);
+    const cat = globals.extrasCatalog.find(c => c.name === catName);
     if (!cat) return;
     let qty = overrideQty || newExtra.qty || 1;
     const guests = ed.guestCount || 1;
@@ -228,7 +241,7 @@ const ReservationDetailView = (props) => {
       let hasFullNight = false;
       for (let d = new Date(ci2); d < co2; d.setDate(d.getDate() + 1)) {
         let dayCount = 0;
-        reservations.forEach(r => {
+        globals.reservations.forEach(r => {
           if (r.id === ed.id) return;
           const st = r.reservationStatus || 'confirmed';
           if (st === 'cancelled' || st === 'no-show' || st === 'blocked') return;
@@ -263,7 +276,7 @@ const ReservationDetailView = (props) => {
     const newId = (next.extras || []).reduce((max, x) => Math.max(max, x.id || 0), 0) + 1;
     next.extras = next.extras || [];
     next.extras.push({ id: newId, name: cat.name, quantity: qty, room: null, vatRate: cat.defaultVat, unitPrice: getExtraPrice(cat, ci) });
-    next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Extra added: ${cat.name} x${qty}`, user: currentUser?.name || 'System' });
+    next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Extra added: ${cat.name} x${qty}`, user: globals.currentUser?.name || 'System' });
     setEditingReservation(next);
     setNewExtra({ name: '', qty: 1, room: '', vat: '', price: '' });
     setExtraDropdownOpen(false);
@@ -280,7 +293,7 @@ const ReservationDetailView = (props) => {
     }
     obj[keys[keys.length - 1]] = value;
     if (logMsg) {
-      next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: logMsg, user: currentUser?.name || 'System' });
+      next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: logMsg, user: globals.currentUser?.name || 'System' });
     }
     setEditingReservation(next);
   };
@@ -313,7 +326,7 @@ const ReservationDetailView = (props) => {
     next.reservationStatus = newStatus;
     // Push reservation status down to all rooms
     (next.rooms || []).forEach(r => { r.status = newStatus; });
-    next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: actionLabel, user: currentUser?.name || 'System' });
+    next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: actionLabel, user: globals.currentUser?.name || 'System' });
     setEditingReservation(next);
     setShowActionMenu(false);
     if (newStatus === 'checked-out') showCheckoutWarning(next);
@@ -333,7 +346,7 @@ const ReservationDetailView = (props) => {
     }
     if (oldStatus !== newStatus) {
       const label = { confirmed: 'Confirmed', option: 'Option', 'checked-in': 'Checked-in', 'checked-out': 'Checked-out', 'no-show': 'No-show', cancelled: 'Cancelled', blocked: 'Blocked' };
-      next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Room ${next.rooms[roomIndex].roomNumber}: ${label[oldStatus] || oldStatus} → ${label[newStatus] || newStatus}`, user: currentUser?.name || 'System' });
+      next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Room ${next.rooms[roomIndex].roomNumber}: ${label[oldStatus] || oldStatus} → ${label[newStatus] || newStatus}`, user: globals.currentUser?.name || 'System' });
     }
     setEditingReservation(next);
     if (newStatus === 'checked-out') showCheckoutWarning(next);
@@ -341,7 +354,7 @@ const ReservationDetailView = (props) => {
 
   const addToActivityLog = (action) => {
     const next = JSON.parse(JSON.stringify(ed));
-    next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action, user: currentUser?.name || 'System' });
+    next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action, user: globals.currentUser?.name || 'System' });
     setEditingReservation(next);
   };
 
@@ -405,28 +418,28 @@ const ReservationDetailView = (props) => {
         </button>
         <nav className="cal-nav">
           <a className="cal-nav-link"><Icons.Calendar width="18" height="18" /><span>Reservations</span></a>
-          {canAccessPage(currentUser?.role, 'channelmanager') && <a className={`cal-nav-link${activePage === 'channelmanager' ? ' active' : ''}`} onClick={() => { setActivePage('channelmanager'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18"><circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/><line x1="10.5" y1="7.5" x2="6.5" y2="16.5"/><line x1="13.5" y1="7.5" x2="17.5" y2="16.5"/></svg><span>Channel manager</span></a>}
-          {canAccessPage(currentUser?.role, 'profiles') && <a className={`cal-nav-link${activePage === 'profiles' ? ' active' : ''}`} onClick={() => { setActivePage('profiles'); setSelectedReservation(null); }}><Icons.Users width="18" height="18" /><span>Profiles</span></a>}
-          {canAccessPage(currentUser?.role, 'payments') && <a className={`cal-nav-link${activePage === 'payments' ? ' active' : ''}`} onClick={() => { setActivePage('payments'); setSelectedReservation(null); }}><Icons.CreditCard width="18" height="18" /><span>Payments</span></a>}
-          {canAccessPage(currentUser?.role, 'reports') && <a className={`cal-nav-link${activePage === 'reports' ? ' active' : ''}`} onClick={() => { setActivePage('reports'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span>Reports</span></a>}
-          {canAccessPage(currentUser?.role, 'settings') && <a className={`cal-nav-link${activePage === 'settings' ? ' active' : ''}`} onClick={() => { setActivePage('settings'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>Settings</span></a>}
+          {canAccessPage(globals.currentUser?.role, 'channelmanager') && <a className={`cal-nav-link${activePage === 'channelmanager' ? ' active' : ''}`} onClick={() => { setActivePage('channelmanager'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18"><circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/><line x1="10.5" y1="7.5" x2="6.5" y2="16.5"/><line x1="13.5" y1="7.5" x2="17.5" y2="16.5"/></svg><span>Channel manager</span></a>}
+          {canAccessPage(globals.currentUser?.role, 'profiles') && <a className={`cal-nav-link${activePage === 'profiles' ? ' active' : ''}`} onClick={() => { setActivePage('profiles'); setSelectedReservation(null); }}><Icons.Users width="18" height="18" /><span>Profiles</span></a>}
+          {canAccessPage(globals.currentUser?.role, 'payments') && <a className={`cal-nav-link${activePage === 'payments' ? ' active' : ''}`} onClick={() => { setActivePage('payments'); setSelectedReservation(null); }}><Icons.CreditCard width="18" height="18" /><span>Payments</span></a>}
+          {canAccessPage(globals.currentUser?.role, 'reports') && <a className={`cal-nav-link${activePage === 'reports' ? ' active' : ''}`} onClick={() => { setActivePage('reports'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span>Reports</span></a>}
+          {canAccessPage(globals.currentUser?.role, 'settings') && <a className={`cal-nav-link${activePage === 'settings' ? ' active' : ''}`} onClick={() => { setActivePage('settings'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>Settings</span></a>}
         </nav>
         <div className="cal-nav-user">
           <div className="relative">
             <button onClick={() => props.setUserMenuOpen(prev => !prev)}
               className={`flex items-center gap-2 w-full px-2 py-1.5 hover:bg-neutral-100 rounded-xl transition-colors ${sidebarCollapsed ? 'justify-center' : ''}`}>
               <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0"
-                style={{ backgroundColor: currentUser?.color || '#6b7280' }}>
-                {currentUser?.name?.split(' ').map(n => n[0]).join('') || '?'}
+                style={{ backgroundColor: globals.currentUser?.color || '#6b7280' }}>
+                {globals.currentUser?.name?.split(' ').map(n => n[0]).join('') || '?'}
               </div>
-              {!sidebarCollapsed && <span className="text-xs text-neutral-600 truncate">{currentUser?.name?.split(' ')[0]}</span>}
+              {!sidebarCollapsed && <span className="text-xs text-neutral-600 truncate">{globals.currentUser?.name?.split(' ')[0]}</span>}
             </button>
             {props.userMenuOpen && (<>
               <div className="fixed inset-0 z-[49]" onClick={() => props.setUserMenuOpen(false)} />
               <div className="absolute left-0 bottom-full mb-1 w-48 bg-white rounded-xl shadow-lg border border-neutral-200 py-1 z-[50]">
                 <div className="px-3 py-2 border-b border-neutral-100">
-                  <div className="text-sm font-medium text-neutral-900">{currentUser?.name}</div>
-                  <div className="text-[11px] text-neutral-400 capitalize">{currentUser?.role}</div>
+                  <div className="text-sm font-medium text-neutral-900">{globals.currentUser?.name}</div>
+                  <div className="text-[11px] text-neutral-400 capitalize">{globals.currentUser?.role}</div>
                 </div>
                 <button onClick={props.handleLogout} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -515,7 +528,7 @@ const ReservationDetailView = (props) => {
               <div className="flex items-center gap-2 md:w-1/4 justify-end">
                 {ed.reservationStatus !== 'blocked' && (<>
                   <button onClick={() => {
-                      const bp = bookerProfiles.find(p =>
+                      const bp = globals.bookerProfiles.find(p =>
                         (p.email && p.email === ed.booker?.email) ||
                         (p.firstName === ed.booker?.firstName && p.lastName === ed.booker?.lastName)
                       );
@@ -549,16 +562,16 @@ const ReservationDetailView = (props) => {
                       const q = switchBookerQuery.toLowerCase();
                       const currentName = `${ed.booker?.firstName || ''} ${ed.booker?.lastName || ''}`.trim().toLowerCase();
                       // Search booker profiles
-                      const bookerMatches = q.length >= 1 ? bookerProfiles.filter(bp => {
+                      const bookerMatches = q.length >= 1 ? globals.bookerProfiles.filter(bp => {
                         const name = `${bp.firstName || ''} ${bp.lastName || ''}`.trim().toLowerCase();
                         if (name === currentName) return false;
                         return name.includes(q) || (bp.email || '').toLowerCase().includes(q) || (bp.phone || '').includes(q);
                       }).slice(0, 6) : [];
                       // Search other reservations' bookers (not in profiles yet)
                       const resBooerMatches = q.length >= 2 ? (() => {
-                        const profileEmails = new Set(bookerProfiles.map(bp => bp.email).filter(Boolean));
+                        const profileEmails = new Set(globals.bookerProfiles.map(bp => bp.email).filter(Boolean));
                         const seen = new Set();
-                        return reservations.filter(r => {
+                        return globals.reservations.filter(r => {
                           if (r.id === reservation.id) return false;
                           const name = `${r.booker?.firstName || ''} ${r.booker?.lastName || ''}`.trim();
                           const email = r.booker?.email || '';
@@ -576,7 +589,7 @@ const ReservationDetailView = (props) => {
                         next.booker = { ...next.booker, firstName: booker.firstName || '', lastName: booker.lastName || '', email: booker.email || '', phone: booker.phone || '' };
                         if (booker.language) next.booker.language = booker.language;
                         next.guest = newName;
-                        next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Booker changed: ${oldName} → ${newName}`, user: currentUser?.name || 'System' });
+                        next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Booker changed: ${oldName} → ${newName}`, user: globals.currentUser?.name || 'System' });
                         setEditingReservation(next);
                         setSwitchBookerOpen(false);
                         setSwitchBookerQuery('');
@@ -618,7 +631,7 @@ const ReservationDetailView = (props) => {
                                 const oldName = `${ed.booker?.firstName || ''} ${ed.booker?.lastName || ''}`.trim();
                                 next.booker = { firstName: '', lastName: '', email: '', phone: '', language: ed.booker?.language || 'en' };
                                 next.guest = '';
-                                next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Booker cleared (was: ${oldName})`, user: currentUser?.name || 'System' });
+                                next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Booker cleared (was: ${oldName})`, user: globals.currentUser?.name || 'System' });
                                 setEditingReservation(next);
                                 setSwitchBookerOpen(false);
                                 setSwitchBookerQuery('');
@@ -715,9 +728,9 @@ const ReservationDetailView = (props) => {
                 const next = JSON.parse(JSON.stringify(ed));
                 if (!next.emailLog) next.emailLog = [];
                 next.emailLog.push(logEntry);
-                next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Email sent: ${logEntry.templateName} to ${logEntry.sentTo}`, user: currentUser?.name || 'System' });
+                next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Email sent: ${logEntry.templateName} to ${logEntry.sentTo}`, user: globals.currentUser?.name || 'System' });
                 // Auto-reminder for credit card request (24h)
-                const tpl = emailTemplates.find(t => t.id === logEntry.templateId);
+                const tpl = globals.emailTemplates.find(t => t.id === logEntry.templateId);
                 if (tpl?.type === 'cc-request' && logEntry.status === 'sent') {
                   if (!next.reminders) next.reminders = [];
                   const reminderDue = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16);
@@ -758,7 +771,7 @@ const ReservationDetailView = (props) => {
                             <div className="text-[10px] text-neutral-400">{inv.date}{inv.recipient?.name ? ` · ${inv.recipient.name}` : ''}</div>
                           </div>
                         </div>
-                        <span className="text-xs font-medium text-neutral-900">{hotelSettings.currency || 'EUR'} {inv.amount.toFixed(2)}</span>
+                        <span className="text-xs font-medium text-neutral-900">{globals.hotelSettings.currency || 'EUR'} {inv.amount.toFixed(2)}</span>
                       </button>
                     ))}
                   </div>
@@ -770,7 +783,7 @@ const ReservationDetailView = (props) => {
           {/* Email Log Viewer Modal — re-renders template on demand (no HTML stored) */}
           {viewingEmailLog && (() => {
             const log = viewingEmailLog;
-            const tpl = emailTemplates.find(t => t.id === log.templateId);
+            const tpl = globals.emailTemplates.find(t => t.id === log.templateId);
             if (!tpl) return null;
             const lang = log.language || 'en';
             const tr = tpl.translations?.[lang];
@@ -885,10 +898,10 @@ const ReservationDetailView = (props) => {
                       name: p.catName,
                       quantity: selectedQty,
                       room: null,
-                      vatRate: p.cat ? p.cat.defaultVat : (vatRates[0]?.rate ?? 6),
+                      vatRate: p.cat ? p.cat.defaultVat : (globals.vatRates[0]?.rate ?? 6),
                       unitPrice: p.cat ? getExtraPrice(p.cat, ciDate) : 0,
                     });
-                    next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Extra added: ${p.catName} x${selectedQty}`, user: currentUser?.name || 'System' });
+                    next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Extra added: ${p.catName} x${selectedQty}`, user: globals.currentUser?.name || 'System' });
                     setEditingReservation(next);
                     setInventoryPopup(null);
                   }}
@@ -905,3 +918,5 @@ const ReservationDetailView = (props) => {
     </div>
   );
 };
+
+export default ReservationDetailView;

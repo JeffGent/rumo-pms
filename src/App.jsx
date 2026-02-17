@@ -1,13 +1,56 @@
-const { useState, useEffect } = React;
+import React, { useState, useEffect, useRef } from 'react';
+import globals from './globals.js';
+import { ROLE_PERMISSIONS, canAccessPage, hasFeature, lsKey, getAllRooms } from './config.js';
+import { generateInitialMessages, clearCurrentUser } from './data.js';
+import { initialSync, onSyncChange, saveReservationSingle, saveReservations } from './supabase.js';
+import { ReservationService } from './services.js';
+import { deriveReservationDates } from './utils.js';
+import { ErrorBoundary } from './utils.js';
+import Icons from './icons.jsx';
+
+// Views
+import LoginScreen from './components/login.jsx';
+import GuestPortal from './views/portal.jsx';
+import ReservationDetailView from './views/detail.jsx';
+import DashboardView from './views/dashboard.jsx';
+import CalendarView from './views/calendar.jsx';
+import HousekeepingView from './views/housekeeping.jsx';
+import FBView from './views/fnb.jsx';
+import ProfilesView from './views/profiles.jsx';
+import ReportsView from './views/reports.jsx';
+import PaymentsView from './views/payments.jsx';
+import ChannelManagerView from './views/channelmanager.jsx';
+import SettingsView from './views/settings.jsx';
+
+// Components
+import SearchModal from './components/search.jsx';
+import NewReservationModal from './components/newres.jsx';
+import InvoiceModal from './components/invoice.jsx';
+import MessagesPanel from './components/messages.jsx';
+import SpotlightTour from './components/tour.jsx';
+
+// Self-contained clock — ticks independently so App doesn't re-render every second
+const HeaderClock = ({ cloudStatus }) => {
+  const [time, setTime] = useState(new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  return (
+    <div className="text-xs text-neutral-500 tabular-nums flex items-center gap-1.5">
+      {time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+      <span className={`w-1.5 h-1.5 rounded-full ${cloudStatus === 'idle' ? 'bg-emerald-400' : cloudStatus === 'syncing' ? 'bg-amber-400 animate-pulse' : cloudStatus === 'error' ? 'bg-red-400' : 'bg-neutral-300'}`} title={cloudStatus === 'idle' ? 'Cloud synced' : cloudStatus === 'syncing' ? 'Syncing...' : cloudStatus === 'error' ? 'Sync error' : 'Offline'} />
+    </div>
+  );
+};
 
 const ModernHotelPMS = () => {
-  const [isLoggedIn, setIsLoggedIn] = useState(() => currentUser !== null);
+  const [isLoggedIn, setIsLoggedIn] = useState(() => globals.currentUser !== null);
   const [, forceUpdate] = useState(0);
-  const [time, setTime] = useState(new Date());
   // Start met gisteren zodat vandaag op positie 2 staat in kalender view
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [activePage, setActivePage] = useState(() => {
-    if (currentUser) return ROLE_PERMISSIONS[currentUser.role]?.pages[0] || 'dashboard';
+    if (globals.currentUser) return ROLE_PERMISSIONS[globals.currentUser.role]?.pages[0] || 'dashboard';
     return 'dashboard';
   });
   // Profile state lifted to App level so it survives ProfilesView re-mounts
@@ -21,13 +64,13 @@ const ModernHotelPMS = () => {
   const [selectedReservation, setSelectedReservation] = useState(null);
   const [previousPage, setPreviousPage] = useState(null);
   const [reservationTab, setReservationTab] = useState('overview');
-  const [billSelected, setBillSelected] = React.useState(null);
-  const [billSplitMode, setBillSplitMode] = React.useState(false);
-  const [billPaySelected, setBillPaySelected] = React.useState([]);
-  const [billRecipientOverride, setBillRecipientOverride] = React.useState(null);
-  const [billCustomLabels, setBillCustomLabels] = React.useState({});
-  const [amendingInvoice, setAmendingInvoice] = React.useState(null);
-  const [amendRecipient, setAmendRecipient] = React.useState(null);
+  const [billSelected, setBillSelected] = useState(null);
+  const [billSplitMode, setBillSplitMode] = useState(false);
+  const [billPaySelected, setBillPaySelected] = useState([]);
+  const [billRecipientOverride, setBillRecipientOverride] = useState(null);
+  const [billCustomLabels, setBillCustomLabels] = useState({});
+  const [amendingInvoice, setAmendingInvoice] = useState(null);
+  const [amendRecipient, setAmendRecipient] = useState(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activeFilter, setActiveFilter] = useState(() => {
     const hour = new Date().getHours();
@@ -68,16 +111,18 @@ const ModernHotelPMS = () => {
   const [billTransferTarget, setBillTransferTarget] = useState(null);
   const [billTransferSelected, setBillTransferSelected] = useState([]);
   const [toastMessage, setToastMessage] = useState(null);
-  const [warningToast, setWarningToast] = useState(null); // { message, resId }
+  const [warningToast, setWarningToast] = useState(null); // { message, resId, type? }
+  const lastSavedAtRef = useRef(null); // tracks our own updatedAt to avoid self-blocking
+  const tabIdRef = useRef(Math.random().toString(36).slice(2, 10)); // unique per-tab ID for presence
   const [cloudStatus, setCloudStatus] = useState('idle'); // Supabase sync indicator
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [tourActive, setTourActive] = useState(null);
-  const messageInputRef = React.useRef(null);
-  const messagesEndRef = React.useRef(null);
-  const searchInputRef = React.useRef(null);
-  const focusValRef = React.useRef('');
-  const addRoomRef = React.useRef(null);
-  const dragPaymentRef = React.useRef(null);
+  const messageInputRef = useRef(null);
+  const messagesEndRef = useRef(null);
+  const searchInputRef = useRef(null);
+  const focusValRef = useRef('');
+  const addRoomRef = useRef(null);
+  const dragPaymentRef = useRef(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   // ── Login / Logout handlers ─────────────────────────────────────────
@@ -98,8 +143,8 @@ const ModernHotelPMS = () => {
 
   // Redirect if current page is not allowed for role
   useEffect(() => {
-    if (currentUser && !canAccessPage(currentUser.role, activePage)) {
-      const defaultPage = ROLE_PERMISSIONS[currentUser.role]?.pages[0] || 'dashboard';
+    if (globals.currentUser && !canAccessPage(globals.currentUser.role, activePage)) {
+      const defaultPage = ROLE_PERMISSIONS[globals.currentUser.role]?.pages[0] || 'dashboard';
       setActivePage(defaultPage);
     }
   }, [activePage]);
@@ -113,7 +158,7 @@ const ModernHotelPMS = () => {
     } catch (e) {
       console.error('Error loading housekeeping status:', e);
     }
-    return Object.fromEntries(reservations.map(r => [r.id, r.housekeeping]));
+    return Object.fromEntries(globals.reservations.map(r => [r.id, r.housekeeping]));
   });
 
   useEffect(() => {
@@ -136,13 +181,7 @@ const ModernHotelPMS = () => {
     }
   }, [calDatePickerOpen]);
 
-  // Only tick the clock when NOT on reservation detail, profiles, or modals (avoids re-renders that kill state/dropdowns)
-  const clockPaused = selectedReservation || newReservationOpen || searchOpen || invoiceOpen || messagesOpen || calDatePickerOpen || activePage === 'profiles' || activePage === 'reports' || activePage === 'settings' || activePage === 'payments' || activePage === 'channelmanager';
-  useEffect(() => {
-    if (clockPaused) return;
-    const timer = setInterval(() => setTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, [clockPaused]);
+  // Clock moved to self-contained HeaderClock component to avoid App-level re-renders
 
   // Sync editingReservation when selectedReservation changes
   useEffect(() => {
@@ -189,11 +228,17 @@ const ModernHotelPMS = () => {
         }
         if (!room.status) room.status = ed.reservationStatus || 'confirmed';
       });
+      // Optimistic locking: snapshot the updatedAt so we can detect conflicts later
+      ed._snapshotUpdatedAt = selectedReservation.updatedAt || Date.now();
+      lastSavedAtRef.current = null; // reset — fresh edit session
+      // Presence: announce we're editing this reservation
+      try { localStorage.setItem(lsKey('editing_' + selectedReservation.id), JSON.stringify({ user: globals.currentUser?.name || 'Unknown', tabId: tabIdRef.current, time: Date.now() })); } catch (_) {}
       setEditingReservation(ed);
     } else {
       setEditingReservation(null);
     }
     setShowActionMenu(false);
+    setWarningToast(w => w?.type === 'conflict' ? null : w); // clear conflict toast on navigation
     // Init add-room dates from first room
     if (selectedReservation && selectedReservation.rooms && selectedReservation.rooms[0]) {
       const r0 = selectedReservation.rooms[0];
@@ -204,14 +249,44 @@ const ModernHotelPMS = () => {
     }
   }, [selectedReservation]);
 
+  // Presence cleanup: remove our editing lock when we leave the reservation or close the tab
+  useEffect(() => {
+    const clearPresence = () => {
+      if (selectedReservation) {
+        try { localStorage.removeItem(lsKey('editing_' + selectedReservation.id)); } catch (_) {}
+      }
+    };
+    window.addEventListener('beforeunload', clearPresence);
+    return () => {
+      clearPresence(); // fires on selectedReservation change (old value cleaned up) or unmount
+      window.removeEventListener('beforeunload', clearPresence);
+    };
+  }, [selectedReservation]);
+
   // Auto-save editingReservation changes back to reservations array + localStorage
   useEffect(() => {
     if (!editingReservation) return;
-    const idx = reservations.findIndex(r => r.id === editingReservation.id);
+    const idx = globals.reservations.findIndex(r => r.id === editingReservation.id);
     if (idx === -1) return;
+
+    // Optimistic locking: check if someone else modified this reservation since we opened it
+    // Compare against both the initial snapshot AND our own last save (to avoid self-blocking)
+    const stored = globals.reservations[idx];
+    const ourLatest = lastSavedAtRef.current || editingReservation._snapshotUpdatedAt || 0;
+    if (stored.updatedAt && ourLatest && stored.updatedAt > ourLatest) {
+      const who = stored.updatedBy && stored.updatedBy !== (globals.currentUser?.name || '')
+        ? stored.updatedBy : 'Someone else';
+      setWarningToast({ type: 'conflict', message: `${who} is also editing this reservation. Close and reopen to see the latest version, or your next save may overwrite their changes.`, resId: editingReservation.id });
+      return; // Don't overwrite — stale data
+    }
+
+    const now = Date.now();
     const derivedStatus = ReservationService.deriveReservationStatus(editingReservation.rooms, editingReservation.reservationStatus);
+    const { _snapshotUpdatedAt, ...edWithoutSnapshot } = editingReservation;
     const updated = {
-      ...editingReservation,
+      ...edWithoutSnapshot,
+      updatedAt: now,
+      updatedBy: globals.currentUser?.name || '',
       reservationStatus: derivedStatus,
       rooms: (editingReservation.rooms || []).map(room => ({
         ...room,
@@ -220,9 +295,60 @@ const ModernHotelPMS = () => {
       }))
     };
     deriveReservationDates(updated);
-    reservations[idx] = updated;
+    globals.reservations[idx] = updated;
+    lastSavedAtRef.current = now; // track our own save so we don't self-block
     saveReservationSingle(updated);
   }, [editingReservation]);
+
+  // Multi-tab conflict detection + auto-refresh when other editor leaves
+  useEffect(() => {
+    const handleStorage = (e) => {
+      if (!selectedReservation) return;
+      // Conflict: another tab saved changes to the reservations list
+      if (e.key === lsKey('hotelReservations') && editingReservation) {
+        try {
+          const freshList = JSON.parse(e.newValue || '[]');
+          const fresh = freshList.find(r => r.id === selectedReservation.id);
+          const ourLatest = lastSavedAtRef.current || editingReservation._snapshotUpdatedAt || 0;
+          if (fresh && fresh.updatedAt > ourLatest) {
+            const who = fresh.updatedBy && fresh.updatedBy !== (globals.currentUser?.name || '')
+              ? fresh.updatedBy : 'Someone';
+            setWarningToast({ type: 'conflict', message: `${who} is also editing this reservation. Be careful not to overwrite each other's changes.`, resId: selectedReservation.id });
+          }
+        } catch (_) { /* ignore parse errors */ }
+      }
+      // Presence: other editor left this reservation → auto-refresh
+      if (e.key === lsKey('editing_' + selectedReservation.id) && e.newValue === null && e.oldValue) {
+        try {
+          const prev = JSON.parse(e.oldValue);
+          if (prev.tabId !== tabIdRef.current) {
+            // Other editor left — reload fresh data from localStorage
+            const freshStr = localStorage.getItem(lsKey('hotelReservations'));
+            if (freshStr) {
+              const freshList = JSON.parse(freshStr);
+              const fresh = freshList.find(r => r.id === selectedReservation.id);
+              if (fresh) {
+                // Update module-level array
+                const idx = globals.reservations.findIndex(r => r.id === selectedReservation.id);
+                if (idx !== -1) {
+                  fresh.checkin = new Date(fresh.checkin);
+                  fresh.checkout = new Date(fresh.checkout);
+                  (fresh.rooms || []).forEach(rm => { rm.checkin = new Date(rm.checkin); rm.checkout = new Date(rm.checkout); });
+                  globals.reservations[idx] = fresh;
+                }
+                // Re-select → triggers editingReservation rebuild with fresh data
+                setSelectedReservation({ ...fresh });
+                const who = prev.user || 'The other editor';
+                setWarningToast({ type: 'success', message: `${who} is done editing. Reservation refreshed automatically.`, resId: selectedReservation.id });
+              }
+            }
+          }
+        } catch (_) { /* ignore parse errors */ }
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, [selectedReservation, editingReservation]);
 
   // Helper: check billing issues on checkout
   const showCheckoutWarning = (res) => {
@@ -236,14 +362,14 @@ const ModernHotelPMS = () => {
       const wasToggled = prev[resId];
       const newValue = wasToggled ? false : new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
       // Also update the reservation in the module-level array
-      const idx = reservations.findIndex(r => r.id === resId);
+      const idx = globals.reservations.findIndex(r => r.id === resId);
       if (idx !== -1) {
         if (isDeparting) {
-          reservations[idx].isCheckedOut = !!newValue;
-          reservations[idx].reservationStatus = newValue ? 'checked-out' : 'checked-in';
+          globals.reservations[idx].isCheckedOut = !!newValue;
+          globals.reservations[idx].reservationStatus = newValue ? 'checked-out' : 'checked-in';
           // Update first room status
-          if (reservations[idx].rooms && reservations[idx].rooms[0]) {
-            reservations[idx].rooms[0].status = newValue ? 'checked-out' : 'checked-in';
+          if (globals.reservations[idx].rooms && globals.reservations[idx].rooms[0]) {
+            globals.reservations[idx].rooms[0].status = newValue ? 'checked-out' : 'checked-in';
           }
           // Set housekeeping to dirty on checkout
           if (newValue) {
@@ -253,38 +379,38 @@ const ModernHotelPMS = () => {
               return next;
             });
             // Show billing warning if issues exist
-            showCheckoutWarning(reservations[idx]);
+            showCheckoutWarning(globals.reservations[idx]);
             // Auto-charge VCC on checkout
-            const vccPayment = ReservationService.createVCCAutoCharge(reservations[idx], bookerProfiles);
+            const vccPayment = ReservationService.createVCCAutoCharge(globals.reservations[idx], globals.bookerProfiles);
             if (vccPayment) {
-              reservations[idx].payments = [...(reservations[idx].payments || []), vccPayment];
+              globals.reservations[idx].payments = [...(globals.reservations[idx].payments || []), vccPayment];
               setToastMessage(`VCC charged: EUR ${vccPayment.amount.toFixed(2)}`);
-              saveReservationSingle(reservations[idx]);
+              saveReservationSingle(globals.reservations[idx]);
             }
           }
         } else {
-          reservations[idx].isCheckedIn = !!newValue;
-          reservations[idx].checkedInTime = newValue || null;
-          reservations[idx].reservationStatus = newValue ? 'checked-in' : 'confirmed';
+          globals.reservations[idx].isCheckedIn = !!newValue;
+          globals.reservations[idx].checkedInTime = newValue || null;
+          globals.reservations[idx].reservationStatus = newValue ? 'checked-in' : 'confirmed';
           // Update first room status
-          if (reservations[idx].rooms && reservations[idx].rooms[0]) {
-            reservations[idx].rooms[0].status = newValue ? 'checked-in' : 'confirmed';
+          if (globals.reservations[idx].rooms && globals.reservations[idx].rooms[0]) {
+            globals.reservations[idx].rooms[0].status = newValue ? 'checked-in' : 'confirmed';
           }
         }
         // Activity log
-        if (!reservations[idx].activityLog) reservations[idx].activityLog = [];
+        if (!globals.reservations[idx].activityLog) globals.reservations[idx].activityLog = [];
         const logAction = isDeparting
           ? (newValue ? 'Checked out' : 'Check-out undone')
           : (newValue ? `Checked in at ${newValue}` : 'Check-in undone');
-        reservations[idx].activityLog.push(ReservationService.createLogEntry(logAction, currentUser?.name));
-        saveReservationSingle(reservations[idx]);
+        globals.reservations[idx].activityLog.push(ReservationService.createLogEntry(logAction, globals.currentUser?.name));
+        saveReservationSingle(globals.reservations[idx]);
       }
       return { ...prev, [resId]: newValue };
     });
   };
 
   // Close popups on Escape or click outside
-  const popupOpenRef = React.useRef({ actionMenu: false, changeRoom: null });
+  const popupOpenRef = useRef({ actionMenu: false, changeRoom: null });
   popupOpenRef.current = { actionMenu: showActionMenu, changeRoom: changeRoomTarget };
   useEffect(() => {
     const handleKey = (e) => { if (e.key === 'Escape') { setShowActionMenu(false); setChangeRoomTarget(null); } };
@@ -302,7 +428,7 @@ const ModernHotelPMS = () => {
   }, []);
 
   // Browser back button: push state when opening reservation/modal, pop to close
-  const historyDepthRef = React.useRef(0);
+  const historyDepthRef = useRef(0);
   useEffect(() => {
     const handlePop = () => {
       if (historyDepthRef.current > 0) historyDepthRef.current--;
@@ -337,9 +463,9 @@ const ModernHotelPMS = () => {
     }
   }, [toastMessage]);
 
-  // Warning toast auto-dismiss (longer: 6s)
+  // Warning toast auto-dismiss: checkout/success 6s, conflict stays until dismissed or resolved
   useEffect(() => {
-    if (warningToast) {
+    if (warningToast && warningToast.type !== 'conflict') {
       const timer = setTimeout(() => setWarningToast(null), 6000);
       return () => clearTimeout(timer);
     }
@@ -348,11 +474,11 @@ const ModernHotelPMS = () => {
   // Option auto-cancel: check every 30 seconds for expired options
   useEffect(() => {
     const checkExpired = () => {
-      if (ReservationService.processExpiredOptions(reservations)) {
+      if (ReservationService.processExpiredOptions(globals.reservations)) {
         saveReservations();
         setToastMessage('Option(s) expired \u2014 reservation auto-cancelled');
         if (selectedReservation) {
-          const fresh = reservations.find(r => r.id === selectedReservation.id);
+          const fresh = globals.reservations.find(r => r.id === selectedReservation.id);
           if (fresh && fresh.reservationStatus === 'cancelled') {
             setSelectedReservation({ ...fresh, checkin: new Date(fresh.checkin), checkout: new Date(fresh.checkout) });
           }
@@ -367,16 +493,16 @@ const ModernHotelPMS = () => {
   // Reminder auto-fire: check every 10 seconds for due reminders
   useEffect(() => {
     const checkReminders = () => {
-      const fired = ReservationService.processDueReminders(reservations);
+      const fired = ReservationService.processDueReminders(globals.reservations);
       if (fired.length > 0) {
         fired.forEach(f => setToastMessage(f.message));
         saveReservations();
         if (selectedReservation) {
-          const fresh = reservations.find(r => r.id === selectedReservation.id);
+          const fresh = globals.reservations.find(r => r.id === selectedReservation.id);
           if (fresh) setSelectedReservation({ ...fresh, checkin: new Date(fresh.checkin), checkout: new Date(fresh.checkout) });
         }
         if (editingReservation) {
-          const freshEd = reservations.find(r => r.id === editingReservation.id);
+          const freshEd = globals.reservations.find(r => r.id === editingReservation.id);
           if (freshEd) {
             setEditingReservation(prev => {
               const next = JSON.parse(JSON.stringify(prev));
@@ -431,49 +557,49 @@ const ModernHotelPMS = () => {
       if (!mod) return;
 
       // Mod+N: New Reservation (role-gated)
-      if (e.key === 'n' && hasFeature(currentUser?.role, 'newReservation')) {
+      if (e.key === 'n' && hasFeature(globals.currentUser?.role, 'newReservation')) {
         e.preventDefault();
         setNewReservationOpen(true);
         return;
       }
 
       // Mod+F: Invoice (role-gated)
-      if (e.key === 'f' && hasFeature(currentUser?.role, 'invoicePayment')) {
+      if (e.key === 'f' && hasFeature(globals.currentUser?.role, 'invoicePayment')) {
         e.preventDefault();
         setInvoiceOpen(true);
         return;
       }
 
       // Mod+1: Dashboard (role-gated)
-      if (e.key === '1' && canAccessPage(currentUser?.role, 'dashboard')) {
+      if (e.key === '1' && canAccessPage(globals.currentUser?.role, 'dashboard')) {
         e.preventDefault();
         setActivePage('dashboard'); setSelectedReservation(null);
         return;
       }
 
       // Mod+2: Calendar (role-gated)
-      if (e.key === '2' && canAccessPage(currentUser?.role, 'calendar')) {
+      if (e.key === '2' && canAccessPage(globals.currentUser?.role, 'calendar')) {
         e.preventDefault();
         setActivePage('calendar'); setSelectedReservation(null);
         return;
       }
 
       // Mod+3: Housekeeping (role-gated)
-      if (e.key === '3' && canAccessPage(currentUser?.role, 'housekeeping')) {
+      if (e.key === '3' && canAccessPage(globals.currentUser?.role, 'housekeeping')) {
         e.preventDefault();
         setActivePage('housekeeping'); setSelectedReservation(null);
         return;
       }
 
       // Mod+4: F&B (role-gated)
-      if (e.key === '4' && canAccessPage(currentUser?.role, 'fb')) {
+      if (e.key === '4' && canAccessPage(globals.currentUser?.role, 'fb')) {
         e.preventDefault();
         setActivePage('fb'); setSelectedReservation(null);
         return;
       }
 
       // Mod+5: Reports (role-gated)
-      if (e.key === '5' && canAccessPage(currentUser?.role, 'reports')) {
+      if (e.key === '5' && canAccessPage(globals.currentUser?.role, 'reports')) {
         e.preventDefault();
         setActivePage('reports'); setSelectedReservation(null);
         return;
@@ -521,11 +647,11 @@ const ModernHotelPMS = () => {
     { id: 'calendar', label: 'Calendar', icon: Icons.Calendar },
     { id: 'housekeeping', label: 'Housekeeping', icon: Icons.Sparkles },
     { id: 'fb', label: 'F&B', icon: fbIcon },
-  ].filter(tab => canAccessPage(currentUser?.role, tab.id));
+  ].filter(tab => canAccessPage(globals.currentUser?.role, tab.id));
 
   // ── View Props bundle ────────────────────────────────────────────────
   const vp = {
-    time, selectedDate, setSelectedDate, activePage, setActivePage,
+    selectedDate, setSelectedDate, activePage, setActivePage,
     profileSelectedProfile, setProfileSelectedProfile, profileEditingProfile, setProfileEditingProfile,
     profileSourceReservation, setProfileSourceReservation, profileSourceTab, setProfileSourceTab,
     quickView, mounted, selectedReservation, setSelectedReservation,
@@ -550,8 +676,8 @@ const ModernHotelPMS = () => {
     changeRoomTarget, setChangeRoomTarget, toastMessage, setToastMessage,
     housekeepingStatus, setHousekeepingStatus, totalRooms,
     messageInputRef, messagesEndRef, searchInputRef, focusValRef, addRoomRef, dragPaymentRef,
-    showCheckoutWarning, toggleCheckInOut, setTime,
-    currentUser, handleLogout, userMenuOpen, setUserMenuOpen,
+    showCheckoutWarning, toggleCheckInOut,
+    currentUser: globals.currentUser, handleLogout, userMenuOpen, setUserMenuOpen,
   };
 
   // Guest Portal — standalone route, no login required
@@ -586,10 +712,7 @@ const ModernHotelPMS = () => {
                 </div>
                 <div>
                   <div className="text-sm font-semibold text-neutral-900">Rumo</div>
-                  <div className="text-xs text-neutral-500 tabular-nums flex items-center gap-1.5">
-                    {time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                    <span className={`w-1.5 h-1.5 rounded-full ${cloudStatus === 'idle' ? 'bg-emerald-400' : cloudStatus === 'syncing' ? 'bg-amber-400 animate-pulse' : cloudStatus === 'error' ? 'bg-red-400' : 'bg-neutral-300'}`} title={cloudStatus === 'idle' ? 'Cloud synced' : cloudStatus === 'syncing' ? 'Syncing...' : cloudStatus === 'error' ? 'Sync error' : 'Offline'} />
-                  </div>
+                  <HeaderClock cloudStatus={cloudStatus} />
                 </div>
               </div>
 
@@ -618,7 +741,7 @@ const ModernHotelPMS = () => {
             {/* Right Side - Stats & Actions */}
             <div className="flex items-center gap-3 md:gap-6">
               {/* New Reservation Button */}
-              {hasFeature(currentUser?.role, 'newReservation') && (
+              {hasFeature(globals.currentUser?.role, 'newReservation') && (
                 <button data-tour="new-res-btn" onClick={() => setNewReservationOpen(true)}
                   className="hidden md:flex items-center gap-2 px-4 py-2 bg-neutral-900 text-white rounded-xl font-medium hover:bg-neutral-800 transition-colors duration-200 shadow-lg">
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -641,9 +764,9 @@ const ModernHotelPMS = () => {
               <button onClick={() => setMessagesOpen(prev => !prev)} className="relative p-2 hover:bg-neutral-100 rounded-xl transition-colors duration-200">
                 <Icons.Bell className="w-5 h-5 text-neutral-600" />
                 {(() => {
-                  const dmUnread = messages.filter(m => m.to === currentUserId && !m.read).length;
-                  const groupUnread = messages.filter(m => m.readBy && !m.readBy.includes(currentUserId) && m.from !== currentUserId).length;
-                  const remindersDue = reservations.reduce((c, r) => c + (r.reminders || []).filter(rem => !rem.fired && new Date(rem.dueDate) <= new Date()).length, 0);
+                  const dmUnread = messages.filter(m => m.to === globals.currentUserId && !m.read).length;
+                  const groupUnread = messages.filter(m => m.readBy && !m.readBy.includes(globals.currentUserId) && m.from !== globals.currentUserId).length;
+                  const remindersDue = globals.reservations.reduce((c, r) => c + (r.reminders || []).filter(rem => !rem.fired && new Date(rem.dueDate) <= new Date()).length, 0);
                   const total = dmUnread + groupUnread + remindersDue;
                   return total > 0 ? (
                     <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-red-500 text-white text-[11px] font-bold rounded-full flex items-center justify-center shadow-sm">
@@ -685,7 +808,7 @@ const ModernHotelPMS = () => {
                 { id: 'payments', label: 'Payments', icon: Icons.CreditCard },
                 { id: 'reports', label: 'Reports', icon: (p) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...p}><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> },
                 { id: 'settings', label: 'Settings', icon: (p) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...p}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> },
-              ].filter(tab => canAccessPage(currentUser?.role, tab.id)).map(tab => {
+              ].filter(tab => canAccessPage(globals.currentUser?.role, tab.id)).map(tab => {
                 const IconComp = tab.icon;
                 return (
                   <button key={tab.id} onClick={() => { setActivePage(tab.id); setSelectedReservation(null); setMobileMenuOpen(false); }}
@@ -701,8 +824,8 @@ const ModernHotelPMS = () => {
             <div className="p-4 border-t border-neutral-100">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[9px] font-bold" style={{ backgroundColor: currentUser?.color }}>{currentUser?.name?.split(' ').map(n => n[0]).join('')}</div>
-                  <span className="text-xs font-medium text-neutral-700">{currentUser?.name}</span>
+                  <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[9px] font-bold" style={{ backgroundColor: globals.currentUser?.color }}>{globals.currentUser?.name?.split(' ').map(n => n[0]).join('')}</div>
+                  <span className="text-xs font-medium text-neutral-700">{globals.currentUser?.name}</span>
                 </div>
                 <button onClick={() => { setMobileMenuOpen(false); handleLogout(); }} className="text-xs text-red-500 hover:text-red-700">Sign out</button>
               </div>
@@ -720,7 +843,7 @@ const ModernHotelPMS = () => {
             { id: 'housekeeping', label: 'Housekeeping', icon: Icons.Sparkles },
             { id: 'fb', label: 'F&B', icon: fbIcon },
             { id: 'messages', label: 'Messages', icon: Icons.Bell },
-          ].filter(tab => tab.id === 'messages' || canAccessPage(currentUser?.role, tab.id)).map(tab => {
+          ].filter(tab => tab.id === 'messages' || canAccessPage(globals.currentUser?.role, tab.id)).map(tab => {
             const IconComponent = tab.icon;
             const isActive = tab.id === 'messages' ? messagesOpen : activePage === tab.id;
             return (
@@ -737,9 +860,9 @@ const ModernHotelPMS = () => {
                 <IconComponent className="w-5 h-5" />
                 <span className="text-[11px] font-medium">{tab.label}</span>
                 {tab.id === 'messages' && (() => {
-                  const dmUnread = messages.filter(m => m.to === currentUserId && !m.read).length;
-                  const groupUnread = messages.filter(m => m.readBy && !m.readBy.includes(currentUserId) && m.from !== currentUserId).length;
-                  const remindersDue = reservations.reduce((c, r) => c + (r.reminders || []).filter(rem => !rem.fired && new Date(rem.dueDate) <= new Date()).length, 0);
+                  const dmUnread = messages.filter(m => m.to === globals.currentUserId && !m.read).length;
+                  const groupUnread = messages.filter(m => m.readBy && !m.readBy.includes(globals.currentUserId) && m.from !== globals.currentUserId).length;
+                  const remindersDue = globals.reservations.reduce((c, r) => c + (r.reminders || []).filter(rem => !rem.fired && new Date(rem.dueDate) <= new Date()).length, 0);
                   const total = dmUnread + groupUnread + remindersDue;
                   return total > 0 ? (
                     <span className="absolute top-0 right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
@@ -843,34 +966,55 @@ const ModernHotelPMS = () => {
           </div>
         </div>
       )}
-      {warningToast && (
+      {warningToast && (() => {
+        const isSuccess = warningToast.type === 'success';
+        const isConflict = warningToast.type === 'conflict';
+        const bg = isSuccess ? 'bg-emerald-50' : 'bg-amber-50';
+        const border = isSuccess ? 'border-emerald-300' : 'border-amber-300';
+        const iconColor = isSuccess ? 'text-emerald-600' : 'text-amber-600';
+        const titleColor = isSuccess ? 'text-emerald-900' : 'text-amber-900';
+        const msgColor = isSuccess ? 'text-emerald-800' : 'text-amber-800';
+        const btnColor = isSuccess ? 'text-emerald-700 hover:text-emerald-900' : 'text-amber-700 hover:text-amber-900';
+        const btnBg = isSuccess ? 'hover:bg-emerald-100' : 'hover:bg-amber-100';
+        const xColor = isSuccess ? 'text-emerald-500' : 'text-amber-500';
+        const title = isSuccess ? 'Reservation refreshed' : isConflict ? 'Editing conflict' : 'Check-out warning';
+        return (
         <div className="fixed bottom-32 md:bottom-16 left-1/2 -translate-x-1/2 z-[201] max-w-2xl w-[calc(100%-2rem)]"
           style={{ animation: 'fadeIn 0.2s ease-out' }}>
-          <div className="bg-amber-50 border border-amber-300 rounded-2xl shadow-2xl px-5 py-3.5">
+          <div className={`${bg} border ${border} rounded-2xl shadow-2xl px-5 py-3.5`}>
             <div className="flex items-start gap-3">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5">
-                <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-              </svg>
+              {isSuccess ? (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`w-5 h-5 ${iconColor} flex-shrink-0 mt-0.5`}>
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`w-5 h-5 ${iconColor} flex-shrink-0 mt-0.5`}>
+                  <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+              )}
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-semibold text-amber-900">Check-out warning</div>
-                <div className="text-xs text-amber-800 mt-0.5">{warningToast.message}</div>
+                <div className={`text-sm font-semibold ${titleColor}`}>{title}</div>
+                <div className={`text-xs ${msgColor} mt-0.5`}>{warningToast.message}</div>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
-                <button onClick={() => {
-                  const res = reservations.find(r => r.id === warningToast.resId);
-                  if (res) { setSelectedReservation(res); setReservationTab('billing'); }
-                  setWarningToast(null);
-                }} className="text-xs font-medium text-amber-700 hover:text-amber-900 whitespace-nowrap">
-                  View billing
-                </button>
-                <button onClick={() => setWarningToast(null)} className="p-0.5 hover:bg-amber-100 rounded-lg transition-colors">
-                  <Icons.X className="w-3.5 h-3.5 text-amber-500" />
+                {!isConflict && !isSuccess && (
+                  <button onClick={() => {
+                    const res = globals.reservations.find(r => r.id === warningToast.resId);
+                    if (res) { setSelectedReservation(res); setReservationTab('billing'); }
+                    setWarningToast(null);
+                  }} className={`text-xs font-medium ${btnColor} whitespace-nowrap`}>
+                    View billing
+                  </button>
+                )}
+                <button onClick={() => setWarningToast(null)} className={`p-0.5 ${btnBg} rounded-lg transition-colors`}>
+                  <Icons.X className={`w-3.5 h-3.5 ${xColor}`} />
                 </button>
               </div>
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
       {toastMessage && (
         <div className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-[200] px-6 py-3 bg-neutral-900 text-white rounded-2xl shadow-2xl text-sm font-medium flex items-center gap-3"
           style={{ animation: 'fadeIn 0.2s ease-out' }}>
@@ -885,6 +1029,4 @@ const ModernHotelPMS = () => {
   );
 };
 
-// Render the app
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(<ModernHotelPMS />);
+export default ModernHotelPMS;

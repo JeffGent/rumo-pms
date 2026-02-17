@@ -1,3 +1,10 @@
+import React from 'react';
+import globals from '../globals.js';
+import Icons from '../icons.jsx';
+import { noTypeDateKey } from '../utils.js';
+import { canAccessPage, saveCashRegister } from '../config.js';
+import { saveReservationSingle } from '../supabase.js';
+
 // ── Payments View ─────────────────────────────────────────────────────────────
 const PaymentsView = (props) => {
   const { sidebarCollapsed, setSidebarCollapsed, activePage, setActivePage, setSelectedReservation, setPreviousPage, setToastMessage } = props;
@@ -44,7 +51,7 @@ const PaymentsView = (props) => {
   // ── Data aggregation ──
   const getAllPayments = () => {
     const all = [];
-    reservations.forEach(res => {
+    globals.reservations.forEach(res => {
       (res.payments || []).forEach(p => {
         all.push({
           ...p,
@@ -84,7 +91,7 @@ const PaymentsView = (props) => {
   })();
 
   // Rumo Pay = non-cash payments (processed through payment system)
-  const rumoPayMethods = (hotelSettings.paymentMethods || []).filter(m => m !== 'Cash');
+  const rumoPayMethods = (globals.hotelSettings.paymentMethods || []).filter(m => m !== 'Cash');
   const isRumoPayMethod = (m) => rumoPayMethods.includes(m) || (m && m.startsWith('Credit Card')) || (m && m.startsWith('VCC'));
   const rumoPayPayments = filterByDate(allPayments).filter(p => isRumoPayMethod(p.method));
 
@@ -116,7 +123,7 @@ const PaymentsView = (props) => {
   );
 
   // Methods for filter dropdown: configured methods + any historical methods from data
-  const configuredMethods = hotelSettings.paymentMethods || ['Cash', 'Card (PIN)', 'Maestro', 'Mastercard', 'Visa', 'iDEAL', 'Bank Transfer'];
+  const configuredMethods = globals.hotelSettings.paymentMethods || ['Cash', 'Card (PIN)', 'Maestro', 'Mastercard', 'Visa', 'iDEAL', 'Bank Transfer'];
   const historicalMethods = [...new Set(allPayments.map(p => p.method).filter(Boolean))];
   const allMethods = [...configuredMethods];
   historicalMethods.forEach(m => { if (!allMethods.includes(m)) allMethods.push(m); });
@@ -135,7 +142,7 @@ const PaymentsView = (props) => {
 
   // Navigate to reservation detail
   const goToReservation = (resId) => {
-    const res = reservations.find(r => r.id === resId);
+    const res = globals.reservations.find(r => r.id === resId);
     if (res) {
       setPreviousPage('payments');
       setSelectedReservation(res);
@@ -206,7 +213,7 @@ const PaymentsView = (props) => {
       .s-pending { background: #fffbeb; color: #b45309; }
       .s-request-sent { background: #eff6ff; color: #1d4ed8; }
     </style></head><body>`;
-    html += `<h1>${esc(hotelSettings?.companyName || hotelSettings?.hotelName || 'Hotel')} — ${esc(title || 'Payments')}</h1>`;
+    html += `<h1>${esc(globals.hotelSettings?.companyName || globals.hotelSettings?.hotelName || 'Hotel')} — ${esc(title || 'Payments')}</h1>`;
     html += `<div class="meta">${payments.length} payments &bull; Generated ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</div>`;
     html += '<table><thead><tr><th>Date</th><th>Reservation</th><th>Guest</th><th class="right">Amount</th><th>Method</th><th>Status</th><th>Note</th></tr></thead><tbody>';
     payments.forEach(p => {
@@ -429,7 +436,7 @@ const PaymentsView = (props) => {
           setToastMessage('Invalid refund amount');
           return;
         }
-        const res = reservations.find(r => r.id === refundModal.reservationId);
+        const res = globals.reservations.find(r => r.id === refundModal.reservationId);
         if (!res) return;
         const maxId = (res.payments || []).reduce((m, p) => Math.max(m, p.id || 0), 0);
         const refundPayment = {
@@ -575,9 +582,9 @@ const PaymentsView = (props) => {
           {/* Payment Detail Modal */}
           {paymentDetailModal && (() => {
             const pm = paymentDetailModal;
-            const res = reservations.find(r => r.id === pm.reservationId);
+            const res = globals.reservations.find(r => r.id === pm.reservationId);
             const booker = res?.booker || {};
-            const bp = bookerProfiles.find(b => b.email === booker.email || (b.firstName === booker.firstName && b.lastName === booker.lastName));
+            const bp = globals.bookerProfiles.find(b => b.email === booker.email || (b.firstName === booker.firstName && b.lastName === booker.lastName));
             const card = bp?.creditCard || null;
             const isVCC = card?.isVCC || false;
             const method = pm.method || '';
@@ -905,11 +912,11 @@ const PaymentsView = (props) => {
 
     // ── VCC sub-tab ──
     const VCCSubTab = () => {
-      const vccProfiles = bookerProfiles.filter(bp => bp.creditCard?.isVCC);
+      const vccProfiles = globals.bookerProfiles.filter(bp => bp.creditCard?.isVCC);
 
       // Match VCC profiles to reservations
       const vccEntries = vccProfiles.map(bp => {
-        const linkedRes = reservations.filter(r =>
+        const linkedRes = globals.reservations.filter(r =>
           (r.booker?.email && r.booker.email === bp.email) ||
           (r.booker?.firstName === bp.firstName && r.booker?.lastName === bp.lastName)
         );
@@ -928,10 +935,10 @@ const PaymentsView = (props) => {
         entry.linkedRes.forEach(res => {
           const fin = calcResFinancials(res);
           if (fin.outstanding <= 0) return;
-          const idx = reservations.findIndex(r => r.id === res.id);
+          const idx = globals.reservations.findIndex(r => r.id === res.id);
           if (idx === -1) return;
-          const maxId = (reservations[idx].payments || []).reduce((m, p) => Math.max(m, p.id || 0), 0);
-          reservations[idx].payments = [...(reservations[idx].payments || []), {
+          const maxId = (globals.reservations[idx].payments || []).reduce((m, p) => Math.max(m, p.id || 0), 0);
+          globals.reservations[idx].payments = [...(globals.reservations[idx].payments || []), {
             id: maxId + 1,
             date: new Date().toISOString().split('T')[0],
             amount: fin.outstanding,
@@ -940,7 +947,7 @@ const PaymentsView = (props) => {
             status: 'completed',
             linkedInvoice: null,
           }];
-          if (typeof saveReservationSingle === 'function') saveReservationSingle(reservations[idx]);
+          if (typeof saveReservationSingle === 'function') saveReservationSingle(globals.reservations[idx]);
         });
       };
 
@@ -1270,7 +1277,7 @@ const PaymentsView = (props) => {
     }));
 
     // Manual kassa entries (from cashRegister)
-    const manualEntries = cashRegister.filter(e => {
+    const manualEntries = globals.cashRegister.filter(e => {
       const d = new Date(e.date);
       return d >= rangeStart && d <= rangeEnd;
     }).map(e => ({
@@ -1289,8 +1296,8 @@ const PaymentsView = (props) => {
 
     // Full balance (all time, not just filtered)
     const allCashIn = allPayments.filter(p => p.method === 'Cash').reduce((s, p) => s + p.amount, 0) +
-                      cashRegister.filter(e => e.type === 'in').reduce((s, e) => s + e.amount, 0);
-    const allCashOut = cashRegister.filter(e => e.type === 'out').reduce((s, e) => s + e.amount, 0);
+                      globals.cashRegister.filter(e => e.type === 'in').reduce((s, e) => s + e.amount, 0);
+    const allCashOut = globals.cashRegister.filter(e => e.type === 'out').reduce((s, e) => s + e.amount, 0);
     const fullBalance = allCashIn - allCashOut;
 
     const categoryLabels = {
@@ -1313,15 +1320,15 @@ const PaymentsView = (props) => {
         category: kassaForm.category || 'other',
         createdAt: Date.now(),
       };
-      cashRegister.push(entry);
+      globals.cashRegister.push(entry);
       saveCashRegister();
       setKassaForm(null);
     };
 
     const deleteKassaEntry = (id) => {
-      const idx = cashRegister.findIndex(e => e.id === id);
+      const idx = globals.cashRegister.findIndex(e => e.id === id);
       if (idx !== -1) {
-        cashRegister.splice(idx, 1);
+        globals.cashRegister.splice(idx, 1);
         saveCashRegister();
         setKassaForm(kassaForm ? { ...kassaForm } : null); // force re-render
       }
@@ -1466,29 +1473,29 @@ const PaymentsView = (props) => {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
       </button>
       <nav className="cal-nav">
-        {canAccessPage(currentUser?.role, 'dashboard') && <a className="cal-nav-link" onClick={() => { setActivePage('dashboard'); setSelectedReservation(null); }}><Icons.Calendar width="18" height="18" /><span>Reservations</span></a>}
-        {canAccessPage(currentUser?.role, 'channelmanager') && <a className={`cal-nav-link${activePage === 'channelmanager' ? ' active' : ''}`} onClick={() => { setActivePage('channelmanager'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18"><circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/><line x1="10.5" y1="7.5" x2="6.5" y2="16.5"/><line x1="13.5" y1="7.5" x2="17.5" y2="16.5"/></svg><span>Channel manager</span></a>}
-        {canAccessPage(currentUser?.role, 'profiles') && <a className={`cal-nav-link${activePage === 'profiles' ? ' active' : ''}`} onClick={() => { setActivePage('profiles'); setSelectedReservation(null); }}><Icons.Users width="18" height="18" /><span>Profiles</span></a>}
+        {canAccessPage(globals.currentUser?.role, 'dashboard') && <a className="cal-nav-link" onClick={() => { setActivePage('dashboard'); setSelectedReservation(null); }}><Icons.Calendar width="18" height="18" /><span>Reservations</span></a>}
+        {canAccessPage(globals.currentUser?.role, 'channelmanager') && <a className={`cal-nav-link${activePage === 'channelmanager' ? ' active' : ''}`} onClick={() => { setActivePage('channelmanager'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18"><circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/><line x1="10.5" y1="7.5" x2="6.5" y2="16.5"/><line x1="13.5" y1="7.5" x2="17.5" y2="16.5"/></svg><span>Channel manager</span></a>}
+        {canAccessPage(globals.currentUser?.role, 'profiles') && <a className={`cal-nav-link${activePage === 'profiles' ? ' active' : ''}`} onClick={() => { setActivePage('profiles'); setSelectedReservation(null); }}><Icons.Users width="18" height="18" /><span>Profiles</span></a>}
         <a className="cal-nav-link active"><Icons.CreditCard width="18" height="18" /><span>Payments</span></a>
-        {canAccessPage(currentUser?.role, 'reports') && <a className={`cal-nav-link${activePage === 'reports' ? ' active' : ''}`} onClick={() => { setActivePage('reports'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span>Reports</span></a>}
-        {canAccessPage(currentUser?.role, 'settings') && <a className={`cal-nav-link${activePage === 'settings' ? ' active' : ''}`} onClick={() => { setActivePage('settings'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>Settings</span></a>}
+        {canAccessPage(globals.currentUser?.role, 'reports') && <a className={`cal-nav-link${activePage === 'reports' ? ' active' : ''}`} onClick={() => { setActivePage('reports'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span>Reports</span></a>}
+        {canAccessPage(globals.currentUser?.role, 'settings') && <a className={`cal-nav-link${activePage === 'settings' ? ' active' : ''}`} onClick={() => { setActivePage('settings'); setSelectedReservation(null); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>Settings</span></a>}
       </nav>
       <div className="cal-nav-user">
         <div className="relative">
           <button onClick={() => props.setUserMenuOpen(prev => !prev)}
             className={`flex items-center gap-2 w-full px-2 py-1.5 hover:bg-neutral-100 rounded-xl transition-colors ${sidebarCollapsed ? 'justify-center' : ''}`}>
             <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0"
-              style={{ backgroundColor: currentUser?.color || '#6b7280' }}>
-              {currentUser?.name?.split(' ').map(n => n[0]).join('') || '?'}
+              style={{ backgroundColor: globals.currentUser?.color || '#6b7280' }}>
+              {globals.currentUser?.name?.split(' ').map(n => n[0]).join('') || '?'}
             </div>
-            {!sidebarCollapsed && <span className="text-xs text-neutral-600 truncate">{currentUser?.name?.split(' ')[0]}</span>}
+            {!sidebarCollapsed && <span className="text-xs text-neutral-600 truncate">{globals.currentUser?.name?.split(' ')[0]}</span>}
           </button>
           {props.userMenuOpen && (<>
             <div className="fixed inset-0 z-[49]" onClick={() => props.setUserMenuOpen(false)} />
             <div className="absolute left-0 bottom-full mb-1 w-48 bg-white rounded-xl shadow-lg border border-neutral-200 py-1 z-[50]">
               <div className="px-3 py-2 border-b border-neutral-100">
-                <div className="text-sm font-medium text-neutral-900">{currentUser?.name}</div>
-                <div className="text-[11px] text-neutral-400 capitalize">{currentUser?.role}</div>
+                <div className="text-sm font-medium text-neutral-900">{globals.currentUser?.name}</div>
+                <div className="text-[11px] text-neutral-400 capitalize">{globals.currentUser?.role}</div>
               </div>
               <button onClick={props.handleLogout} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -1545,3 +1552,5 @@ const PaymentsView = (props) => {
     </div>
   );
 };
+
+export default PaymentsView;

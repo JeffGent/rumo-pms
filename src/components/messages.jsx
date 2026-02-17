@@ -1,8 +1,13 @@
+import React, { useState } from 'react';
+import globals from '../globals.js';
+import { Icons } from '../icons.jsx';
+import { saveReservationSingle } from '../supabase.js';
+
 const MessagesPanel = (props) => {
     const { messagesOpen, setMessagesOpen, messages, setMessages, activeConversation, setActiveConversation, setShowCompose, showCompose, messagesEndRef, messageInputRef, setPreviousPage, activePage, setSelectedReservation, setToastMessage, setTime } = props;
 
-    const [msgInput, setMsgInput] = React.useState('');
-    const [composeSearch, setComposeSearch] = React.useState('');
+    const [msgInput, setMsgInput] = useState('');
+    const [composeSearch, setComposeSearch] = useState('');
 
     if (!messagesOpen) return null;
 
@@ -19,24 +24,24 @@ const MessagesPanel = (props) => {
     };
 
     // Build DM conversations
-    const dmConversations = staffMembers
-      .filter(s => s.id !== currentUserId)
+    const dmConversations = globals.staffMembers
+      .filter(s => s.id !== globals.currentUserId)
       .map(staff => {
         const convoMsgs = messages.filter(m =>
-          (m.from === staff.id && m.to === currentUserId) ||
-          (m.from === currentUserId && m.to === staff.id)
+          (m.from === staff.id && m.to === globals.currentUserId) ||
+          (m.from === globals.currentUserId && m.to === staff.id)
         ).sort((a, b) => a.timestamp - b.timestamp);
         const lastMsg = convoMsgs[convoMsgs.length - 1];
-        const unread = convoMsgs.filter(m => m.to === currentUserId && !m.read).length;
+        const unread = convoMsgs.filter(m => m.to === globals.currentUserId && !m.read).length;
         return { id: staff.id, type: 'dm', staff, messages: convoMsgs, lastMsg, unread };
       })
       .filter(c => c.lastMsg);
 
     // Build group conversations
-    const groupConversations = groupChannels.map(group => {
+    const groupConversations = globals.groupChannels.map(group => {
       const convoMsgs = messages.filter(m => m.to === group.id).sort((a, b) => a.timestamp - b.timestamp);
       const lastMsg = convoMsgs[convoMsgs.length - 1];
-      const unread = convoMsgs.filter(m => m.from !== currentUserId && m.readBy && !m.readBy.includes(currentUserId)).length;
+      const unread = convoMsgs.filter(m => m.from !== globals.currentUserId && m.readBy && !m.readBy.includes(globals.currentUserId)).length;
       return { id: group.id, type: 'group', group, messages: convoMsgs, lastMsg, unread };
     }).filter(c => c.lastMsg);
 
@@ -51,13 +56,13 @@ const MessagesPanel = (props) => {
     const markAsRead = (convoId) => {
       if (isGroup(convoId)) {
         setMessages(prev => prev.map(m =>
-          m.to === convoId && m.readBy && !m.readBy.includes(currentUserId)
-            ? { ...m, readBy: [...m.readBy, currentUserId] }
+          m.to === convoId && m.readBy && !m.readBy.includes(globals.currentUserId)
+            ? { ...m, readBy: [...m.readBy, globals.currentUserId] }
             : m
         ));
       } else {
         setMessages(prev => prev.map(m =>
-          m.from === convoId && m.to === currentUserId && !m.read
+          m.from === convoId && m.to === globals.currentUserId && !m.read
             ? { ...m, read: true }
             : m
         ));
@@ -68,13 +73,13 @@ const MessagesPanel = (props) => {
       if (!msgInput.trim() || !activeConversation) return;
       const newMsg = {
         id: Date.now(),
-        from: currentUserId,
+        from: globals.currentUserId,
         to: activeConversation,
         text: msgInput.trim(),
         timestamp: Date.now(),
       };
       if (isGroup(activeConversation)) {
-        newMsg.readBy = [currentUserId];
+        newMsg.readBy = [globals.currentUserId];
       } else {
         newMsg.read = true;
       }
@@ -83,13 +88,13 @@ const MessagesPanel = (props) => {
     };
 
     // Staff members not yet in a DM conversation (for compose)
-    const availableContacts = staffMembers.filter(s =>
-      s.id !== currentUserId && !dmConversations.find(c => c.staff.id === s.id)
+    const availableContacts = globals.staffMembers.filter(s =>
+      s.id !== globals.currentUserId && !dmConversations.find(c => c.staff.id === s.id)
     );
 
     const getSenderName = (fromId) => {
-      if (fromId === currentUserId) return 'You';
-      const staff = staffMembers.find(s => s.id === fromId);
+      if (fromId === globals.currentUserId) return 'You';
+      const staff = globals.staffMembers.find(s => s.id === fromId);
       return staff ? staff.name.split(' ')[0] : '?';
     };
 
@@ -102,7 +107,7 @@ const MessagesPanel = (props) => {
         ? `${convo.group.members.length} members`
         : convo.staff.department;
       const lastMsgPreview = convo.lastMsg
-        ? (convo.lastMsg.from === currentUserId ? 'You: ' : (convo.type === 'group' ? getSenderName(convo.lastMsg.from) + ': ' : '')) + convo.lastMsg.text
+        ? (convo.lastMsg.from === globals.currentUserId ? 'You: ' : (convo.type === 'group' ? getSenderName(convo.lastMsg.from) + ': ' : '')) + convo.lastMsg.text
         : '';
 
       return (
@@ -179,7 +184,7 @@ const MessagesPanel = (props) => {
                 const q = composeSearch.toLowerCase();
                 const filteredContacts = availableContacts.filter(s => !q || s.name.toLowerCase().includes(q) || s.role.toLowerCase().includes(q) || s.department.toLowerCase().includes(q));
                 const filteredRecent = dmConversations.filter(c => !q || c.staff.name.toLowerCase().includes(q) || c.staff.role.toLowerCase().includes(q) || c.staff.department.toLowerCase().includes(q));
-                const filteredGroups = groupChannels.filter(g => !q || g.name.toLowerCase().includes(q));
+                const filteredGroups = globals.groupChannels.filter(g => !q || g.name.toLowerCase().includes(q));
                 return (
               <div className="flex-1 overflow-y-auto overscroll-none">
                 {filteredContacts.length > 0 && (
@@ -267,7 +272,7 @@ const MessagesPanel = (props) => {
               <div className="flex-1 overflow-y-auto overscroll-none">
                 {/* Due Reminders */}
                 {(() => {
-                  const dueReminders = reservations.flatMap(res =>
+                  const dueReminders = globals.reservations.flatMap(res =>
                     (res.reminders || []).filter(rem => !rem.fired && new Date(rem.dueDate) <= new Date()).map(rem => ({ ...rem, guest: res.guest || res.booker?.firstName || 'Reservation', resId: res.id, res }))
                   );
                   if (dueReminders.length === 0) return null;
@@ -277,7 +282,7 @@ const MessagesPanel = (props) => {
                       {dueReminders.map(rem => (
                         <div key={rem.id} className="px-5 py-3 flex items-start gap-3 bg-amber-50 border-b border-amber-100 cursor-pointer hover:bg-amber-100/50 transition-colors"
                           onClick={() => {
-                            const resObj = reservations.find(r => r.id === rem.resId);
+                            const resObj = globals.reservations.find(r => r.id === rem.resId);
                             if (resObj) {
                               setPreviousPage(activePage);
                               setSelectedReservation({ ...resObj, checkin: new Date(resObj.checkin), checkout: new Date(resObj.checkout) });
@@ -297,12 +302,12 @@ const MessagesPanel = (props) => {
                           </div>
                           <button onClick={(e) => {
                             e.stopPropagation();
-                            const resObj = reservations.find(r => r.id === rem.resId);
+                            const resObj = globals.reservations.find(r => r.id === rem.resId);
                             if (resObj) {
                               const r = (resObj.reminders || []).find(r => r.id === rem.id);
                               if (r) r.fired = true;
                               resObj.activityLog = resObj.activityLog || [];
-                              resObj.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Reminder acknowledged: "${rem.message}"`, user: currentUser?.name || 'System' });
+                              resObj.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Reminder acknowledged: "${rem.message}"`, user: globals.currentUser?.name || 'System' });
                               saveReservationSingle(resObj);
                               setToastMessage('Reminder acknowledged');
                               setTime(new Date());
@@ -352,8 +357,8 @@ const MessagesPanel = (props) => {
               {/* Messages */}
               <div className="flex-1 overflow-y-auto overscroll-none px-4 py-4 space-y-3">
                 {(activeConvo ? activeConvo.messages : []).map(msg => {
-                  const isOwn = msg.from === currentUserId;
-                  const senderStaff = staffMembers.find(s => s.id === msg.from);
+                  const isOwn = msg.from === globals.currentUserId;
+                  const senderStaff = globals.staffMembers.find(s => s.id === msg.from);
                   return (
                     <div key={msg.id} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
                       <div className={`max-w-[80%] ${isOwn ? '' : 'flex gap-2'}`}>
@@ -409,3 +414,5 @@ const MessagesPanel = (props) => {
       </>
     );
   };
+
+export default MessagesPanel;

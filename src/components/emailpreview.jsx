@@ -1,11 +1,16 @@
-// ── Email Preview / Send Modal ──────────────────────────────────────────────
+import React, { useState } from 'react';
+import globals from '../globals.js';
+import { SUPPORTED_LANGUAGES } from '../config.js';
+import { resolveTemplateVariables, sendEmailViaRelay } from './emailengine.js';
+
+// -- Email Preview / Send Modal -----------------------------------------------
 // Shows rendered email, editable recipient, HTML/plaintext toggle, send button.
 // Sends via PHP relay endpoint (sendEmailViaRelay from emailengine.js).
 // Smart recipient: uses template.defaultRecipient to pre-fill booker or guest email.
 // For group reservations with defaultRecipient 'guests': sends per-room emails.
 
 const EmailPreviewModal = ({ templateId, reservation, extraData, onClose, onSend }) => {
-  const template = emailTemplates.find(t => t.id === templateId);
+  const template = globals.emailTemplates.find(t => t.id === templateId);
   if (!template) return null;
 
   const rooms = reservation?.rooms || [];
@@ -20,7 +25,7 @@ const EmailPreviewModal = ({ templateId, reservation, extraData, onClose, onSend
       const mainGuest = room.guests?.[0];
       const email = mainGuest?.email || '';
       const name = mainGuest ? `${mainGuest.firstName || ''} ${mainGuest.lastName || ''}`.trim() : '';
-      const lang = mainGuest?.language || reservation?.booker?.language || hotelSettings.defaultLanguage || 'en';
+      const lang = mainGuest?.language || reservation?.booker?.language || globals.hotelSettings.defaultLanguage || 'en';
       return { roomIndex: ri, roomNumber: room.roomNumber, email, name, language: lang };
     }).filter(r => r.email); // only rooms with a guest email
   };
@@ -50,7 +55,7 @@ const EmailPreviewModal = ({ templateId, reservation, extraData, onClose, onSend
       const guestLang = rooms[0]?.guests?.[0]?.language;
       if (guestLang) return guestLang;
     }
-    return reservation?.booker?.language || hotelSettings.defaultLanguage || 'en';
+    return reservation?.booker?.language || globals.hotelSettings.defaultLanguage || 'en';
   };
 
   const [recipientEmail, setRecipientEmail] = useState(isPerRoom ? '' : getDefaultRecipient());
@@ -108,7 +113,7 @@ const EmailPreviewModal = ({ templateId, reservation, extraData, onClose, onSend
             subject,
             status: 'sent',
             language: lang,
-            sentBy: currentUser?.name || 'System',
+            sentBy: globals.currentUser?.name || 'System',
             roomNumber: r.roomNumber,
             _roomIndex: r.roomIndex,
           });
@@ -124,7 +129,7 @@ const EmailPreviewModal = ({ templateId, reservation, extraData, onClose, onSend
             subject,
             status: 'failed',
             language: lang,
-            sentBy: currentUser?.name || 'System',
+            sentBy: globals.currentUser?.name || 'System',
             roomNumber: r.roomNumber,
             _roomIndex: r.roomIndex,
           });
@@ -148,7 +153,7 @@ const EmailPreviewModal = ({ templateId, reservation, extraData, onClose, onSend
           subject,
           status: 'sent',
           language: selectedLang,
-          sentBy: currentUser?.name || 'System',
+          sentBy: globals.currentUser?.name || 'System',
         });
       } catch (e) {
         console.error('[Email] Send failed:', e);
@@ -255,3 +260,5 @@ const EmailPreviewModal = ({ templateId, reservation, extraData, onClose, onSend
     </div>
   );
 };
+
+export default EmailPreviewModal;

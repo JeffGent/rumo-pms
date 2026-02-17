@@ -10,3 +10,11 @@ Desktop.ini
 
 # Temp files
 nul
+
+# SMTP credentials (never commit)
+api/.smtp-config.php
+
+# Node / Vite
+node_modules/
+dist/
+*.local

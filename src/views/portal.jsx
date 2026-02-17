@@ -1,6 +1,7 @@
-// ── Guest Portal — Standalone page, no PMS layout ──────────────────────────
-// Rendered outside the normal app when URL hash starts with #/go
-// No login required. Mobile-first, guest-facing design.
+import React, { useState, useEffect } from 'react';
+import globals from '../globals.js';
+import { getRoomTypeName } from '../config.js';
+import { lookupPortalCode } from '../supabase.js';
 
 const GuestPortal = () => {
   const [portalCode, setPortalCode] = useState('');
@@ -28,7 +29,7 @@ const GuestPortal = () => {
   }, []);
 
   // Use branding from Supabase lookup (multi-tenant) or fall back to local hotelSettings
-  const hs = portalData?.hotelBranding || hotelSettings;
+  const hs = portalData?.hotelBranding || globals.hotelSettings;
   const eb = hs.emailBranding || {};
   const pc = eb.primaryColor || '#171717';
 
@@ -131,7 +132,7 @@ const GuestPortal = () => {
     let foundRes = null;
     let supabaseFailed = false;
     let hotelBranding = null;
-    for (const res of reservations) {
+    for (const res of globals.reservations) {
       if (res.bookingRef === code) {
         if (res.rooms?.length) foundRes = res;
         break;
@@ -407,3 +408,5 @@ const GuestPortal = () => {
     </div>
   );
 };
+
+export default GuestPortal;

@@ -1,8 +1,16 @@
+import globals from './globals.js';
+import { toDateStr } from './utils.js';
+import {
+  HOTEL_ID, lsKey,
+  saveHotelSettings, saveRoomTypes, saveRatePlans, saveCancellationPolicies,
+  saveExtrasCatalog, saveVatRates, saveHotelUsers,
+} from './config.js';
+import { DATA_VERSION } from './data.js';
+
 // ── Supabase Connection ──────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://smglrskbamymikilwsti.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNtZ2xyc2tiYW15bWlraWx3c3RpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5OTA2ODgsImV4cCI6MjA4NjU2NjY4OH0.YOVm4nAvZzxrqq_vIIUaf-jCM5NTBShTAQeBhOknw8Q';
 
-// REST API base for direct fetch calls (bypasses supabase-js AbortController issues)
 const REST_URL = `${SUPABASE_URL}/rest/v1`;
 const REST_HEADERS = {
   'apikey': SUPABASE_ANON_KEY,
@@ -16,42 +24,31 @@ let syncStatus = 'idle';
 let lastSyncTime = null;
 let syncListeners = [];
 
-const onSyncChange = (fn) => { syncListeners.push(fn); return () => { syncListeners = syncListeners.filter(f => f !== fn); }; };
+export const onSyncChange = (fn) => { syncListeners.push(fn); return () => { syncListeners = syncListeners.filter(f => f !== fn); }; };
 const notifySync = () => syncListeners.forEach(fn => fn(syncStatus, lastSyncTime));
 const setSyncStatus = (s) => { syncStatus = s; if (s === 'idle') lastSyncTime = new Date(); notifySync(); };
 
 // ── Debounce helper ─────────────────────────────────────────────────────────
 const debounceTimers = {};
-const debounce = (key, fn, ms = 1500) => {
+export const debounce = (key, fn, ms = 1500) => {
   clearTimeout(debounceTimers[key]);
   debounceTimers[key] = setTimeout(fn, ms);
 };
 
 // ── Direct REST helpers ─────────────────────────────────────────────────────
-
-const restGet = async (table, query = '') => {
+export const restGet = async (table, query = '') => {
   const res = await fetch(`${REST_URL}/${table}?${query}`, { headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` } });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
 };
 
-const restUpsert = async (table, rows, onConflict) => {
-  const url = onConflict
-    ? `${REST_URL}/${table}?on_conflict=${onConflict}`
-    : `${REST_URL}/${table}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: REST_HEADERS,
-    body: JSON.stringify(rows),
-  });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`${res.status}: ${body}`);
-  }
+export const restUpsert = async (table, rows, onConflict) => {
+  const url = onConflict ? `${REST_URL}/${table}?on_conflict=${onConflict}` : `${REST_URL}/${table}`;
+  const res = await fetch(url, { method: 'POST', headers: REST_HEADERS, body: JSON.stringify(rows) });
+  if (!res.ok) { const body = await res.text(); throw new Error(`${res.status}: ${body}`); }
 };
 
 // ── Reservation sync ────────────────────────────────────────────────────────
-
 const syncAllReservations = async (resList) => {
   setSyncStatus('syncing');
   try {
@@ -65,20 +62,17 @@ const syncAllReservations = async (resList) => {
         status: res.reservationStatus || 'confirmed',
         guest_name: res.guest || `${res.booker?.firstName || ''} ${res.booker?.lastName || ''}`.trim(),
         data: res,
+        updated_at: new Date().toISOString(),
       }));
-    // Deduplicate by booking_ref (last wins) — prevents PG "cannot affect row a second time" error
     const dedupMap = new Map();
     rawRows.forEach(r => {
       if (dedupMap.has(r.booking_ref)) console.warn(`[Supabase] Duplicate booking_ref skipped: ${r.booking_ref}`);
       dedupMap.set(r.booking_ref, r);
     });
     const rows = [...dedupMap.values()];
-
-    // Upsert in batches of 50 (PostgREST limit safe)
     for (let i = 0; i < rows.length; i += 50) {
       await restUpsert('reservations', rows.slice(i, i + 50), 'booking_ref');
     }
-
     setSyncStatus('idle');
     console.log(`[Supabase] Synced ${rows.length} reservations`);
     return true;
@@ -89,7 +83,7 @@ const syncAllReservations = async (resList) => {
   }
 };
 
-const syncReservation = async (res) => {
+export const syncReservation = async (res) => {
   if (!res?.bookingRef) return;
   debounce(`res-${res.bookingRef}`, async () => {
     setSyncStatus('syncing');
@@ -113,7 +107,7 @@ const syncReservation = async (res) => {
 };
 
 // ── Config sync ─────────────────────────────────────────────────────────────
-const syncConfig = (key, data) => {
+export const syncConfig = (key, data) => {
   debounce(`cfg-${key}`, async () => {
     try {
       await restUpsert('config', [{ hotel_id: HOTEL_ID, key, data, updated_at: new Date().toISOString() }], 'key');
@@ -123,17 +117,17 @@ const syncConfig = (key, data) => {
   });
 };
 
+// Register syncConfig on globals so config.js can call it without circular import
+globals.syncConfig = syncConfig;
+
 // ── Profile sync ────────────────────────────────────────────────────────────
 const dedup = (rows) => [...new Map(rows.map(r => [r.id, r])).values()];
 
-const syncProfiles = (table, profiles) => {
+export const syncProfiles = (table, profiles) => {
   debounce(`prof-${table}`, async () => {
     try {
       const rows = dedup(profiles.map(p => ({
-        hotel_id: HOTEL_ID,
-        id: String(p.id),
-        data: p,
-        updated_at: new Date().toISOString(),
+        hotel_id: HOTEL_ID, id: String(p.id), data: p, updated_at: new Date().toISOString(),
       })));
       if (rows.length === 0) return;
       await restUpsert(table, rows, 'id');
@@ -144,13 +138,13 @@ const syncProfiles = (table, profiles) => {
 };
 
 // ── Convenience: save reservations to localStorage + Supabase ───────────────
-const saveReservations = () => {
-  try { localStorage.setItem(lsKey('hotelReservations'), JSON.stringify(reservations)); } catch (e) {}
-  debounce('all-res', () => syncAllReservations(reservations), 2000);
+export const saveReservations = () => {
+  try { localStorage.setItem(lsKey('hotelReservations'), JSON.stringify(globals.reservations)); } catch (e) {}
+  debounce('all-res', () => syncAllReservations(globals.reservations), 2000);
 };
 
-const saveReservationSingle = (res) => {
-  try { localStorage.setItem(lsKey('hotelReservations'), JSON.stringify(reservations)); } catch (e) {}
+export const saveReservationSingle = (res) => {
+  try { localStorage.setItem(lsKey('hotelReservations'), JSON.stringify(globals.reservations)); } catch (e) {}
   syncReservation(res);
 };
 
@@ -158,11 +152,10 @@ const saveReservationSingle = (res) => {
 const pullFromSupabase = async () => {
   if (localStorage.getItem(lsKey('supabaseSeeded'))) return false;
 
-  console.log('[Supabase] Fresh instance detected — pulling data from cloud...');
+  console.log('[Supabase] Fresh instance detected \u2014 pulling data from cloud...');
   setSyncStatus('syncing');
 
   try {
-    // 1. Pull config
     const configs = await restGet('config', `hotel_id=eq.${HOTEL_ID}&select=key,data`);
     if (configs.length === 0) {
       console.log('[Supabase] No config in cloud, using defaults');
@@ -174,27 +167,25 @@ const pullFromSupabase = async () => {
     const cfgMap = {};
     configs.forEach(c => { cfgMap[c.key] = c.data; });
 
-    if (cfgMap.hotelSettings) { Object.assign(hotelSettings, cfgMap.hotelSettings); saveHotelSettings(); }
-    if (cfgMap.roomTypes && Array.isArray(cfgMap.roomTypes)) { roomTypes.length = 0; roomTypes.push(...cfgMap.roomTypes); saveRoomTypes(); }
-    if (cfgMap.ratePlans && Array.isArray(cfgMap.ratePlans)) { ratePlans.length = 0; ratePlans.push(...cfgMap.ratePlans); saveRatePlans(); }
-    if (cfgMap.cancellationPolicies && Array.isArray(cfgMap.cancellationPolicies)) { cancellationPolicies.length = 0; cancellationPolicies.push(...cfgMap.cancellationPolicies); saveCancellationPolicies(); }
-    if (cfgMap.extrasCatalog && Array.isArray(cfgMap.extrasCatalog)) { extrasCatalog.length = 0; extrasCatalog.push(...cfgMap.extrasCatalog); saveExtrasCatalog(); }
-    if (cfgMap.vatRates && Array.isArray(cfgMap.vatRates)) { vatRates.length = 0; vatRates.push(...cfgMap.vatRates); saveVatRates(); }
-    if (cfgMap.hotelUsers && Array.isArray(cfgMap.hotelUsers)) { hotelUsers.length = 0; hotelUsers.push(...cfgMap.hotelUsers); saveHotelUsers(); }
+    if (cfgMap.hotelSettings) { Object.assign(globals.hotelSettings, cfgMap.hotelSettings); saveHotelSettings(); }
+    if (cfgMap.roomTypes && Array.isArray(cfgMap.roomTypes)) { globals.roomTypes.length = 0; globals.roomTypes.push(...cfgMap.roomTypes); saveRoomTypes(); }
+    if (cfgMap.ratePlans && Array.isArray(cfgMap.ratePlans)) { globals.ratePlans.length = 0; globals.ratePlans.push(...cfgMap.ratePlans); saveRatePlans(); }
+    if (cfgMap.cancellationPolicies && Array.isArray(cfgMap.cancellationPolicies)) { globals.cancellationPolicies.length = 0; globals.cancellationPolicies.push(...cfgMap.cancellationPolicies); saveCancellationPolicies(); }
+    if (cfgMap.extrasCatalog && Array.isArray(cfgMap.extrasCatalog)) { globals.extrasCatalog.length = 0; globals.extrasCatalog.push(...cfgMap.extrasCatalog); saveExtrasCatalog(); }
+    if (cfgMap.vatRates && Array.isArray(cfgMap.vatRates)) { globals.vatRates.length = 0; globals.vatRates.push(...cfgMap.vatRates); saveVatRates(); }
+    if (cfgMap.hotelUsers && Array.isArray(cfgMap.hotelUsers)) { globals.hotelUsers.length = 0; globals.hotelUsers.push(...cfgMap.hotelUsers); saveHotelUsers(); }
     console.log('[Supabase] Config pulled:', Object.keys(cfgMap).join(', '));
 
-    // 2. Pull reservations
     const resRows = await restGet('reservations', `hotel_id=eq.${HOTEL_ID}&select=data&order=booking_ref`);
     if (resRows.length > 0) {
       const pulled = resRows.map(r => r.data);
       try {
         localStorage.setItem(lsKey('hotelReservations'), JSON.stringify(pulled));
-        localStorage.setItem(lsKey('hotelDataVersion'), typeof DATA_VERSION !== 'undefined' ? String(DATA_VERSION) : '27');
+        localStorage.setItem(lsKey('hotelDataVersion'), String(DATA_VERSION));
       } catch (e) {}
       console.log(`[Supabase] Pulled ${resRows.length} reservations`);
     }
 
-    // 3. Pull profiles
     const pullProf = async (table, storageKey) => {
       try {
         const rows = await restGet(table, `hotel_id=eq.${HOTEL_ID}&select=data`);
@@ -208,9 +199,8 @@ const pullFromSupabase = async () => {
     await pullProf('guest_profiles', 'hotelGuestProfiles');
     await pullProf('booker_profiles', 'hotelBookerProfiles');
 
-    // Mark as seeded, reload to re-initialize everything from pulled localStorage
     localStorage.setItem(lsKey('supabaseSeeded'), String(Date.now()));
-    console.log('[Supabase] Pull complete — reloading...');
+    console.log('[Supabase] Pull complete \u2014 reloading...');
     window.location.reload();
     return true;
   } catch (e) {
@@ -221,8 +211,7 @@ const pullFromSupabase = async () => {
 };
 
 // ── Initial sync on page load ───────────────────────────────────────────────
-const initialSync = async () => {
-  // Check connectivity with a direct fetch
+export const initialSync = async () => {
   try {
     const res = await fetch(`${REST_URL}/config?hotel_id=eq.${HOTEL_ID}&select=key&limit=1`, {
       headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` }
@@ -235,23 +224,21 @@ const initialSync = async () => {
     return;
   }
 
-  // On a fresh instance (no supabaseSeeded flag), pull from cloud first
   const didPull = await pullFromSupabase();
-  if (didPull) return; // page is reloading
+  if (didPull) return;
 
-  // Push current localStorage data to Supabase (direct, no debounce)
   console.log('[Supabase] Starting initial sync...');
-  await syncAllReservations(reservations);
+  await syncAllReservations(globals.reservations);
 
   try {
     await restUpsert('config', [
-      { hotel_id: HOTEL_ID, key: 'hotelSettings', data: hotelSettings, updated_at: new Date().toISOString() },
-      { hotel_id: HOTEL_ID, key: 'roomTypes', data: roomTypes, updated_at: new Date().toISOString() },
-      { hotel_id: HOTEL_ID, key: 'ratePlans', data: ratePlans, updated_at: new Date().toISOString() },
-      { hotel_id: HOTEL_ID, key: 'cancellationPolicies', data: cancellationPolicies, updated_at: new Date().toISOString() },
-      { hotel_id: HOTEL_ID, key: 'extrasCatalog', data: extrasCatalog, updated_at: new Date().toISOString() },
-      { hotel_id: HOTEL_ID, key: 'vatRates', data: vatRates, updated_at: new Date().toISOString() },
-      { hotel_id: HOTEL_ID, key: 'hotelUsers', data: hotelUsers, updated_at: new Date().toISOString() },
+      { hotel_id: HOTEL_ID, key: 'hotelSettings', data: globals.hotelSettings, updated_at: new Date().toISOString() },
+      { hotel_id: HOTEL_ID, key: 'roomTypes', data: globals.roomTypes, updated_at: new Date().toISOString() },
+      { hotel_id: HOTEL_ID, key: 'ratePlans', data: globals.ratePlans, updated_at: new Date().toISOString() },
+      { hotel_id: HOTEL_ID, key: 'cancellationPolicies', data: globals.cancellationPolicies, updated_at: new Date().toISOString() },
+      { hotel_id: HOTEL_ID, key: 'extrasCatalog', data: globals.extrasCatalog, updated_at: new Date().toISOString() },
+      { hotel_id: HOTEL_ID, key: 'vatRates', data: globals.vatRates, updated_at: new Date().toISOString() },
+      { hotel_id: HOTEL_ID, key: 'hotelUsers', data: globals.hotelUsers, updated_at: new Date().toISOString() },
     ], 'key');
   } catch (e) { console.error('[Supabase] Config sync:', e); }
 
@@ -261,61 +248,27 @@ const initialSync = async () => {
     console.log(`[Supabase] ${table}: upserting ${rows.length} rows...`);
     await restUpsert(table, rows, 'id');
     const verify = await restGet(table, `hotel_id=eq.${HOTEL_ID}&select=id&limit=1`);
-    console.log(`[Supabase] ${table}: upsert done, verify read=${verify.length} rows ${verify.length === 0 ? '⚠️ RLS BLOCKING? Check Supabase → Authentication → Policies' : '✓'}`);
+    console.log(`[Supabase] ${table}: upsert done, verify read=${verify.length} rows ${verify.length === 0 ? '\u26a0\ufe0f RLS BLOCKING? Check Supabase \u2192 Authentication \u2192 Policies' : '\u2713'}`);
   };
 
-  try { await profSync('company_profiles', companyProfiles); } catch (e) { console.error('[Supabase] company_profiles FAILED:', e.message); }
-  try { await profSync('guest_profiles', guestProfiles); } catch (e) { console.error('[Supabase] guest_profiles FAILED:', e.message); }
-  try { await profSync('booker_profiles', bookerProfiles); } catch (e) { console.error('[Supabase] booker_profiles FAILED:', e.message); }
+  try { await profSync('company_profiles', globals.companyProfiles); } catch (e) { console.error('[Supabase] company_profiles FAILED:', e.message); }
+  try { await profSync('guest_profiles', globals.guestProfiles); } catch (e) { console.error('[Supabase] guest_profiles FAILED:', e.message); }
+  try { await profSync('booker_profiles', globals.bookerProfiles); } catch (e) { console.error('[Supabase] booker_profiles FAILED:', e.message); }
   console.log('[Supabase] Initial sync complete');
 };
 
-// ── Portal code sync ────────────────────────────────────────────────────────
-/*
- * SQL for the table (run in Supabase SQL Editor):
- *
- * -- Add hotel_id to existing tables (multi-tenant prep):
- * ALTER TABLE reservations ADD COLUMN IF NOT EXISTS hotel_id text NOT NULL DEFAULT 'default';
- * ALTER TABLE config ADD COLUMN IF NOT EXISTS hotel_id text NOT NULL DEFAULT 'default';
- * ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS hotel_id text NOT NULL DEFAULT 'default';
- * ALTER TABLE guest_profiles ADD COLUMN IF NOT EXISTS hotel_id text NOT NULL DEFAULT 'default';
- * ALTER TABLE booker_profiles ADD COLUMN IF NOT EXISTS hotel_id text NOT NULL DEFAULT 'default';
- *
- * CREATE INDEX IF NOT EXISTS idx_reservations_hotel ON reservations(hotel_id);
- * CREATE INDEX IF NOT EXISTS idx_config_hotel ON config(hotel_id);
- * CREATE INDEX IF NOT EXISTS idx_company_profiles_hotel ON company_profiles(hotel_id);
- * CREATE INDEX IF NOT EXISTS idx_guest_profiles_hotel ON guest_profiles(hotel_id);
- * CREATE INDEX IF NOT EXISTS idx_booker_profiles_hotel ON booker_profiles(hotel_id);
- *
- * -- Portal codes table:
- * CREATE TABLE IF NOT EXISTS guest_portal_codes (
- *   code text PRIMARY KEY,
- *   hotel_id text NOT NULL DEFAULT 'default',
- *   booking_ref text NOT NULL,
- *   room_index integer NOT NULL DEFAULT 0,
- *   valid_from timestamptz,
- *   valid_until timestamptz,
- *   created_at timestamptz DEFAULT now()
- * );
- * ALTER TABLE guest_portal_codes ENABLE ROW LEVEL SECURITY;
- * CREATE POLICY "anon_full_access" ON guest_portal_codes FOR ALL USING (true) WITH CHECK (true);
- * CREATE INDEX idx_portal_codes_booking ON guest_portal_codes(booking_ref);
- * CREATE INDEX idx_portal_codes_hotel ON guest_portal_codes(hotel_id);
- */
-/** Lookup reservation by bookingRef for guest portal (searches all hotels) */
-const lookupPortalCode = async (code) => {
+// ── Portal code lookup ──────────────────────────────────────────────────────
+export const lookupPortalCode = async (code) => {
   try {
-    // bookingRef is globally unique — search across all hotels
     const resRows = await restGet('reservations', `booking_ref=eq.${encodeURIComponent(code)}&select=hotel_id,data`);
     if (resRows.length === 0) return null;
     const row = resRows[0];
-    // Pull hotel branding for this tenant
     const hid = row.hotel_id || HOTEL_ID;
     let hotelBranding = null;
     try {
       const cfgRows = await restGet('config', `hotel_id=eq.${hid}&key=eq.hotelSettings&select=data`);
       if (cfgRows.length > 0) hotelBranding = cfgRows[0].data;
-    } catch (e) { /* branding is optional */ }
+    } catch (e) {}
     return { reservation: row.data, hotelBranding };
   } catch (e) {
     console.error('[Supabase] Portal lookup failed:', e);
@@ -326,6 +279,6 @@ const lookupPortalCode = async (code) => {
 // ── Force pull (console helper) ────────────────────────────────────────────
 window.forcePull = () => {
   localStorage.removeItem(lsKey('supabaseSeeded'));
-  console.log('[Supabase] supabaseSeeded removed — reloading to trigger pull...');
+  console.log('[Supabase] supabaseSeeded removed \u2014 reloading to trigger pull...');
   location.reload();
 };

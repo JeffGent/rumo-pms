@@ -1,26 +1,30 @@
-// ── Login Screen ────────────────────────────────────────────────────────────
-const LoginScreen = ({ onLogin }) => {
-  const [selectedUser, setSelectedUser] = React.useState(null);
-  const [pin, setPin] = React.useState('');
-  const [error, setError] = React.useState('');
-  const [shake, setShake] = React.useState(false);
-  const [search, setSearch] = React.useState('');
-  const [dropdownOpen, setDropdownOpen] = React.useState(false);
-  const pinRef = React.useRef(null);
-  const searchRef = React.useRef(null);
-  const wrapperRef = React.useRef(null);
+import React, { useState, useEffect, useRef } from 'react';
+import globals from '../globals.js';
+import { setCurrentUser } from '../data.js';
 
-  const activeUsers = hotelUsers.filter(u => u.active);
+// -- Login Screen -------------------------------------------------------------
+const LoginScreen = ({ onLogin }) => {
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [pin, setPin] = useState('');
+  const [error, setError] = useState('');
+  const [shake, setShake] = useState(false);
+  const [search, setSearch] = useState('');
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const pinRef = useRef(null);
+  const searchRef = useRef(null);
+  const wrapperRef = useRef(null);
+
+  const activeUsers = globals.hotelUsers.filter(u => u.active);
   const filteredUsers = search.trim()
     ? activeUsers.filter(u => u.name.toLowerCase().includes(search.toLowerCase()))
     : [];
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (selectedUser && pinRef.current) pinRef.current.focus();
   }, [selectedUser]);
 
   // Close dropdown on outside click
-  React.useEffect(() => {
+  useEffect(() => {
     const handle = (e) => {
       if (wrapperRef.current && !wrapperRef.current.contains(e.target)) setDropdownOpen(false);
     };
@@ -29,7 +33,7 @@ const LoginScreen = ({ onLogin }) => {
   }, []);
 
   const handlePinSubmit = () => {
-    const user = hotelUsers.find(u => u.id === selectedUser && u.active);
+    const user = globals.hotelUsers.find(u => u.id === selectedUser && u.active);
     if (!user) return;
     if (user.pin !== pin) {
       setError('Incorrect PIN');
@@ -59,13 +63,13 @@ const LoginScreen = ({ onLogin }) => {
   const roleLabels = { admin: 'Admin', manager: 'Manager', receptionist: 'Reception', housekeeping: 'Housekeeping', fb: 'F&B' };
 
   // Clock
-  const [time, setTime] = React.useState(new Date());
-  React.useEffect(() => {
+  const [time, setTime] = useState(new Date());
+  useEffect(() => {
     const iv = setInterval(() => setTime(new Date()), 30000);
     return () => clearInterval(iv);
   }, []);
 
-  const eb = (hotelSettings.emailBranding || {});
+  const eb = (globals.hotelSettings.emailBranding || {});
   const logo = eb.logoUrl || null;
 
   return (
@@ -79,7 +83,7 @@ const LoginScreen = ({ onLogin }) => {
               <span style={{color: '#fff', fontSize: 18, fontWeight: 700}}>R</span>
             </div>
         }
-        <h1 style={{fontFamily: 'Georgia, serif', fontSize: 22, fontWeight: 'normal', color: '#111', margin: '0 0 4px'}}>{hotelSettings.hotelName || 'Rumo PMS'}</h1>
+        <h1 style={{fontFamily: 'Georgia, serif', fontSize: 22, fontWeight: 'normal', color: '#111', margin: '0 0 4px'}}>{globals.hotelSettings.hotelName || 'Rumo PMS'}</h1>
         <p style={{color: '#999', fontSize: 14, margin: '0 0 32px'}}>
           {time.toLocaleDateString('nl-BE', { weekday: 'long', day: 'numeric', month: 'long' })}
           <span style={{margin: '0 6px', color: '#ccc'}}>·</span>
@@ -139,7 +143,7 @@ const LoginScreen = ({ onLogin }) => {
         ) : (
           <>
             {(() => {
-              const user = hotelUsers.find(u => u.id === selectedUser);
+              const user = globals.hotelUsers.find(u => u.id === selectedUser);
               if (!user) return null;
               return (
                 <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
@@ -193,3 +197,5 @@ const LoginScreen = ({ onLogin }) => {
     </div>
   );
 };
+
+export default LoginScreen;

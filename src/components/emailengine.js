@@ -1,32 +1,36 @@
 /*
- * ── PRODUCTION CHECKLIST — Communication System ────────────────────────
+ * -- PRODUCTION CHECKLIST -- Communication System ---------------------
  * EMAIL DELIVERY:
- * □ Choose email service provider (Resend / Postmark / AWS SES)
- * □ Set up sending domain + DNS records (SPF, DKIM, DMARC)
- * □ Implement actual email sending in emailPreview "Send" handler
- * □ Add email delivery status webhooks (delivered/bounced/opened)
+ * [] Choose email service provider (Resend / Postmark / AWS SES)
+ * [] Set up sending domain + DNS records (SPF, DKIM, DMARC)
+ * [] Implement actual email sending in emailPreview "Send" handler
+ * [] Add email delivery status webhooks (delivered/bounced/opened)
  *
  * GUEST PORTAL:
- * □ Deploy portal as separate route/app with custom domain support
- * □ Add SSL auto-provisioning for custom portal domains
- * □ Implement online check-in form, payment request, digital key
- * □ Add rate limiting server-side (Supabase edge function)
+ * [] Deploy portal as separate route/app with custom domain support
+ * [] Add SSL auto-provisioning for custom portal domains
+ * [] Implement online check-in form, payment request, digital key
+ * [] Add rate limiting server-side (Supabase edge function)
  *
  * AUTO-SEND:
- * □ Build scheduler service (Supabase Edge Function or cron)
- * □ Check for upcoming check-ins and trigger pre-checkin emails
- * □ Implement retry logic for failed sends
+ * [] Build scheduler service (Supabase Edge Function or cron)
+ * [] Check for upcoming check-ins and trigger pre-checkin emails
+ * [] Implement retry logic for failed sends
  *
  * SECURITY:
- * □ Portal codes: add Supabase RLS limiting reads to valid codes only
- * □ Rate limiting on code validation endpoint
- * □ Sanitize user-provided HTML in custom email templates (XSS)
+ * [] Portal codes: add Supabase RLS limiting reads to valid codes only
+ * [] Rate limiting on code validation endpoint
+ * [] Sanitize user-provided HTML in custom email templates (XSS)
  */
 
-// ── Email Template Engine ───────────────────────────────────────────────────
+import globals from '../globals.js';
+import { ReservationService } from '../services.js';
+import { getHotelAddress, getRoomTypeName, saveEmailTemplates, lsKey } from '../config.js';
+
+// -- Email Template Engine ----------------------------------------------------
 
 /** Resolve all {{variable}} placeholders in a template string */
-const resolveTemplateVariables = (templateString, reservation, extraData = {}) => {
+export const resolveTemplateVariables = (templateString, reservation, extraData = {}) => {
   if (!templateString) return '';
 
   const res = reservation || {};
@@ -35,8 +39,8 @@ const resolveTemplateVariables = (templateString, reservation, extraData = {}) =
   const ri = (extraData._roomIndex != null && rooms[extraData._roomIndex]) ? extraData._roomIndex : 0;
   const r0 = rooms[ri] || {};
   const booker = res.booker || {};
-  const eb = hotelSettings.emailBranding || {};
-  const ps = hotelSettings.portalSettings || {};
+  const eb = globals.hotelSettings.emailBranding || {};
+  const ps = globals.hotelSettings.portalSettings || {};
 
   // Calculate totals
   const totals = ReservationService.calculateBillingTotals(res);
@@ -51,16 +55,16 @@ const resolveTemplateVariables = (templateString, reservation, extraData = {}) =
 
   const vars = {
     // General
-    hotel_name: hotelSettings.hotelName || '',
-    company_name: hotelSettings.companyName || hotelSettings.hotelName || '',
+    hotel_name: globals.hotelSettings.hotelName || '',
+    company_name: globals.hotelSettings.companyName || globals.hotelSettings.hotelName || '',
     hotel_address: getHotelAddress(),
-    hotel_email: hotelSettings.hotelEmail || '',
-    hotel_phone: hotelSettings.hotelPhone || '',
-    hotel_logo: eb.logoUrl ? `<img src="${eb.logoUrl}" alt="${hotelSettings.hotelName}" style="max-height:60px;max-width:200px;" />` : '',
+    hotel_email: globals.hotelSettings.hotelEmail || '',
+    hotel_phone: globals.hotelSettings.hotelPhone || '',
+    hotel_logo: eb.logoUrl ? `<img src="${eb.logoUrl}" alt="${globals.hotelSettings.hotelName}" style="max-height:60px;max-width:200px;" />` : '',
     primary_color: eb.primaryColor || '#171717',
     accent_color: eb.accentColor || '#f59e0b',
     background_color: eb.backgroundColor || '#ffffff',
-    footer_text: eb.footerText || `${hotelSettings.hotelName} · ${getHotelAddress()}`,
+    footer_text: eb.footerText || `${globals.hotelSettings.hotelName} · ${getHotelAddress()}`,
     current_date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
     current_year: String(new Date().getFullYear()),
 
@@ -72,10 +76,10 @@ const resolveTemplateVariables = (templateString, reservation, extraData = {}) =
     num_rooms: String(rooms.length),
     room_type: r0.roomType || getRoomTypeName(r0.roomNumber) || '',
     room_number: r0.roomNumber || '',
-    rate_plan: (() => { const rp = ratePlans.find(p => p.id === r0.ratePlanId); return rp?.name || ''; })(),
+    rate_plan: (() => { const rp = globals.ratePlans.find(p => p.id === r0.ratePlanId); return rp?.name || ''; })(),
     total_price: totals.totalAmount.toFixed(2),
-    currency: hotelSettings.currency || 'EUR',
-    extras_list: (res.extras || []).map(e => `${e.name} x${e.quantity} — ${hotelSettings.currency || 'EUR'} ${(e.quantity * e.unitPrice).toFixed(2)}`).join('\n') || 'None',
+    currency: globals.hotelSettings.currency || 'EUR',
+    extras_list: (res.extras || []).map(e => `${e.name} x${e.quantity} — ${globals.hotelSettings.currency || 'EUR'} ${(e.quantity * e.unitPrice).toFixed(2)}`).join('\n') || 'None',
     special_requests: res.specialRequests || '',
 
     // Guest / Booker
@@ -91,7 +95,7 @@ const resolveTemplateVariables = (templateString, reservation, extraData = {}) =
     paid_amount: totals.paidAmount.toFixed(2),
     outstanding_amount: totals.outstandingAmount.toFixed(2),
 
-    // Portal — uses guest last name + room number for per-room portal links
+    // Portal -- uses guest last name + room number for per-room portal links
     portal_code: res.bookingRef || '',
     portal_url: res.bookingRef ? getPortalUrl(res.bookingRef, portalLastName, portalRoomNumber) : '',
     portal_link: res.bookingRef ? getPortalUrl(res.bookingRef, portalLastName, portalRoomNumber) : '',
@@ -117,8 +121,8 @@ const resolveTemplateVariables = (templateString, reservation, extraData = {}) =
 };
 
 /** Get the full portal URL for a booking reference + optional name/room for auto-fill */
-const getPortalUrl = (code, lastName, roomNumber) => {
-  const ps = hotelSettings.portalSettings || {};
+export const getPortalUrl = (code, lastName, roomNumber) => {
+  const ps = globals.hotelSettings.portalSettings || {};
   const nameParam = lastName ? `&name=${encodeURIComponent(lastName)}` : '';
   const roomParam = roomNumber ? `&room=${encodeURIComponent(roomNumber)}` : '';
   if (ps.portalDomain) return `https://${ps.portalDomain}/go?code=${code}${nameParam}${roomParam}`;
@@ -127,8 +131,8 @@ const getPortalUrl = (code, lastName, roomNumber) => {
 };
 
 /** Send an email via the PHP relay endpoint */
-const sendEmailViaRelay = async (to, subject, html, fromName) => {
-  const ps = hotelSettings.portalSettings || {};
+export const sendEmailViaRelay = async (to, subject, html, fromName) => {
+  const ps = globals.hotelSettings.portalSettings || {};
   // Determine relay URL: custom domain, or same-origin /api/, or localhost fallback
   const relayBase = ps.emailRelayUrl
     || (window.location.hostname !== '127.0.0.1' && window.location.hostname !== 'localhost'
@@ -147,7 +151,7 @@ const sendEmailViaRelay = async (to, subject, html, fromName) => {
       to,
       subject,
       html,
-      from_name: fromName || hotelSettings.hotelName || 'Hotel',
+      from_name: fromName || globals.hotelSettings.hotelName || 'Hotel',
     }),
   });
 
@@ -159,7 +163,7 @@ const sendEmailViaRelay = async (to, subject, html, fromName) => {
 };
 
 /** Strip HTML tags to generate a reasonable plaintext version */
-const htmlToPlaintext = (html) => {
+export const htmlToPlaintext = (html) => {
   if (!html) return '';
   return html
     .replace(/<br\s*\/?>/gi, '\n')
@@ -179,20 +183,20 @@ const htmlToPlaintext = (html) => {
     .trim();
 };
 
-// ── Default HTML Email Templates (table-based, inline-styled) ───────────────
-// Design: mirrors the guest portal — clean, spacious, no visible borders on detail grids,
+// -- Default HTML Email Templates (table-based, inline-styled) ----------------
+// Design: mirrors the guest portal -- clean, spacious, no visible borders on detail grids,
 // Georgia serif headings, muted uppercase labels, whitespace instead of lines.
 
-const buildEmailHtml = (bodyContent) => {
-  const eb = hotelSettings.emailBranding || {};
+export const buildEmailHtml = (bodyContent) => {
+  const eb = globals.hotelSettings.emailBranding || {};
   const bg = eb.backgroundColor || '#ffffff';
-  const hotelName = hotelSettings.hotelName || 'Hotel';
+  const hotelName = globals.hotelSettings.hotelName || 'Hotel';
   const address = getHotelAddress();
   const logo = eb.logoUrl
     ? `<img src="${eb.logoUrl}" alt="${hotelName}" style="max-height:44px;max-width:160px;display:block;margin:0 auto;" />`
     : '';
   // WhatsApp deep link (strip formatting, drop leading +)
-  const waPhone = (hotelSettings.hotelPhone || '').replace(/[\s\-\(\)\.]/g, '').replace(/^\+/, '');
+  const waPhone = (globals.hotelSettings.hotelPhone || '').replace(/[\s\-\(\)\.]/g, '').replace(/^\+/, '');
   const waUrl = waPhone ? `https://wa.me/${waPhone}` : '';
   // Google Maps link
   const mapsUrl = address ? `https://maps.google.com/?q=${encodeURIComponent(hotelName + ', ' + address)}` : '';
@@ -216,7 +220,7 @@ const buildEmailHtml = (bodyContent) => {
           </a>
         </td>` : ''}
         <td style="padding:0 6px;">
-          <a href="mailto:${hotelSettings.hotelEmail || ''}" style="display:inline-block;padding:10px 20px;border:1px solid #e5e5e5;border-radius:10px;text-decoration:none;color:#555;font-size:13px;font-weight:500;">
+          <a href="mailto:${globals.hotelSettings.hotelEmail || ''}" style="display:inline-block;padding:10px 20px;border:1px solid #e5e5e5;border-radius:10px;text-decoration:none;color:#555;font-size:13px;font-weight:500;">
             Email
           </a>
         </td>
@@ -239,7 +243,7 @@ const buildEmailHtml = (bodyContent) => {
 </td></tr></table>`;
 };
 
-const DEFAULT_CONFIRMATION_HTML = buildEmailHtml(`
+const DEFAULT_CONFIRMATION_HTML = () => buildEmailHtml(`
 <h2 style="font-family:Georgia,serif;font-size:24px;color:#111;margin:0 0 6px;font-weight:normal;">Your reservation is confirmed</h2>
 <p style="font-size:14px;line-height:1.7;color:#777;margin:0 0 32px;">Dear {{booker_firstname}}, thank you for your booking.</p>
 
@@ -285,7 +289,7 @@ const DEFAULT_CONFIRMATION_HTML = buildEmailHtml(`
 <p style="font-size:11px;color:#ccc;text-align:center;margin:0;">Portal code: <span style="font-family:monospace;letter-spacing:2px;color:#aaa;">{{portal_code}}</span></p>
 `);
 
-const DEFAULT_PRECHECKIN_HTML = buildEmailHtml(`
+const DEFAULT_PRECHECKIN_HTML = () => buildEmailHtml(`
 <h2 style="font-family:Georgia,serif;font-size:24px;color:#111;margin:0 0 6px;font-weight:normal;">Prepare your stay</h2>
 <p style="font-size:14px;line-height:1.7;color:#777;margin:0 0 32px;">Dear {{booker_firstname}}, your check-in is coming up on <span style="color:#111;font-weight:600;">{{checkin_date}}</span>.</p>
 
@@ -326,7 +330,7 @@ const DEFAULT_PRECHECKIN_HTML = buildEmailHtml(`
 <p style="font-size:14px;color:#999;text-align:center;margin:8px 0 0;">We look forward to welcoming you!</p>
 `);
 
-const DEFAULT_INVOICE_HTML = buildEmailHtml(`
+const DEFAULT_INVOICE_HTML = () => buildEmailHtml(`
 <h2 style="font-family:Georgia,serif;font-size:24px;color:#111;margin:0 0 4px;font-weight:normal;">Invoice {{invoice_number}}</h2>
 <p style="font-size:13px;color:#aaa;margin:0 0 32px;">{{invoice_date}}</p>
 
@@ -366,7 +370,7 @@ const DEFAULT_INVOICE_HTML = buildEmailHtml(`
 </table>
 `);
 
-const DEFAULT_CHECKOUT_HTML = buildEmailHtml(`
+const DEFAULT_CHECKOUT_HTML = () => buildEmailHtml(`
 <h2 style="font-family:Georgia,serif;font-size:24px;color:#111;margin:0 0 6px;font-weight:normal;">Thank you for your stay</h2>
 <p style="font-size:14px;line-height:1.7;color:#777;margin:0 0 32px;">Dear {{booker_firstname}}, we hope you enjoyed your time at {{hotel_name}}.</p>
 
@@ -399,7 +403,7 @@ const DEFAULT_CHECKOUT_HTML = buildEmailHtml(`
 <p style="font-size:14px;color:#999;text-align:center;margin:0;">We hope to welcome you again soon.</p>
 `);
 
-const DEFAULT_CANCELLATION_HTML = buildEmailHtml(`
+const DEFAULT_CANCELLATION_HTML = () => buildEmailHtml(`
 <h2 style="font-family:Georgia,serif;font-size:24px;color:#111;margin:0 0 6px;font-weight:normal;">Reservation cancelled</h2>
 <p style="font-size:14px;line-height:1.7;color:#777;margin:0 0 32px;">Dear {{booker_firstname}}, your reservation has been cancelled as requested.</p>
 
@@ -431,7 +435,7 @@ const DEFAULT_CANCELLATION_HTML = buildEmailHtml(`
 <p style="font-size:14px;line-height:1.7;color:#777;margin:0 0 8px;">If you have any questions about this cancellation or wish to rebook, please don't hesitate to contact us.</p>
 `);
 
-const DEFAULT_CC_REQUEST_HTML = buildEmailHtml(`
+const DEFAULT_CC_REQUEST_HTML = () => buildEmailHtml(`
 <h2 style="font-family:Georgia,serif;font-size:24px;color:#111;margin:0 0 6px;font-weight:normal;">Credit card required</h2>
 <p style="font-size:14px;line-height:1.7;color:#777;margin:0 0 32px;">Dear {{booker_firstname}}, to guarantee your reservation we kindly ask you to provide your credit card details.</p>
 
@@ -468,14 +472,14 @@ const DEFAULT_CC_REQUEST_HTML = buildEmailHtml(`
 `);
 
 // Apply defaults to templates without HTML, or refresh non-custom templates to latest design
-(() => {
+export const initEmailTemplates = () => {
   const defaults = {
-    'tpl-confirmation': DEFAULT_CONFIRMATION_HTML,
-    'tpl-precheckin': DEFAULT_PRECHECKIN_HTML,
-    'tpl-invoice': DEFAULT_INVOICE_HTML,
-    'tpl-checkout': DEFAULT_CHECKOUT_HTML,
-    'tpl-cancellation': DEFAULT_CANCELLATION_HTML,
-    'tpl-cc-request': DEFAULT_CC_REQUEST_HTML,
+    'tpl-confirmation': DEFAULT_CONFIRMATION_HTML(),
+    'tpl-precheckin': DEFAULT_PRECHECKIN_HTML(),
+    'tpl-invoice': DEFAULT_INVOICE_HTML(),
+    'tpl-checkout': DEFAULT_CHECKOUT_HTML(),
+    'tpl-cancellation': DEFAULT_CANCELLATION_HTML(),
+    'tpl-cc-request': DEFAULT_CC_REQUEST_HTML(),
   };
   const TEMPLATE_VERSION = 7; // bump to force-refresh default templates
   // Rename map: update display names for existing templates
@@ -488,12 +492,12 @@ const DEFAULT_CC_REQUEST_HTML = buildEmailHtml(`
   let changed = false;
   // Inject missing templates
   Object.entries(newTemplates).forEach(([id, tpl]) => {
-    if (!emailTemplates.find(t => t.id === id)) {
-      emailTemplates.push(tpl);
+    if (!globals.emailTemplates.find(t => t.id === id)) {
+      globals.emailTemplates.push(tpl);
       changed = true;
     }
   });
-  emailTemplates.forEach(tpl => {
+  globals.emailTemplates.forEach(tpl => {
     if (renames[tpl.id] && tpl.name !== renames[tpl.id]) {
       tpl.name = renames[tpl.id];
       changed = true;
@@ -505,4 +509,4 @@ const DEFAULT_CC_REQUEST_HTML = buildEmailHtml(`
     }
   });
   if (changed) saveEmailTemplates();
-})();
+};
