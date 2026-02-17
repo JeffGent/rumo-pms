@@ -1,7 +1,16 @@
+// ── Multi-Tenant: Hotel ID ──────────────────────────────────────────────────
+// Each hotel gets a unique ID. All localStorage keys and Supabase rows are scoped by this.
+// For now: hardcoded default. In production: set after login / tenant selection.
+const HOTEL_ID = (() => {
+  try { return localStorage.getItem('rumo_hotel_id') || 'default'; }
+  catch (e) { return 'default'; }
+})();
+const lsKey = (key) => HOTEL_ID === 'default' ? key : `${HOTEL_ID}:${key}`;
+
 // ── Hotel Settings — persisted in localStorage ─────────────────────────────
 let hotelSettings = (() => {
   try {
-    const stored = localStorage.getItem('hotelSettings');
+    const stored = localStorage.getItem(lsKey('hotelSettings'));
     if (stored) return JSON.parse(stored);
   } catch (e) {}
   return {
@@ -53,7 +62,10 @@ let hotelSettings = (() => {
     },
   };
 })();
-const saveHotelSettings = () => localStorage.setItem('hotelSettings', JSON.stringify(hotelSettings));
+const saveHotelSettings = () => {
+  localStorage.setItem(lsKey('hotelSettings'), JSON.stringify(hotelSettings));
+  if (typeof syncConfig === 'function') syncConfig('hotelSettings', hotelSettings);
+};
 
 // Ensure invoiceNumbering exists for existing localStorage data
 if (!hotelSettings.invoiceNumbering) {
@@ -71,15 +83,17 @@ if (!hotelSettings.bookingRefNumbering) {
 if (!hotelSettings.paymentMethods || !hotelSettings.paymentMethods.length) {
   hotelSettings.paymentMethods = ['Cash', 'Card (PIN)', 'Maestro', 'Mastercard', 'Visa', 'iDEAL', 'Bank Transfer'];
   saveHotelSettings();
-} else {
-  // Ensure Cash is first and Bank Transfer is last
-  const pm = hotelSettings.paymentMethods.filter(m => m !== 'Cash' && m !== 'Bank Transfer');
-  pm.unshift('Cash');
-  pm.push('Bank Transfer');
-  if (JSON.stringify(pm) !== JSON.stringify(hotelSettings.paymentMethods)) {
+}
+// v1 migration: ensure Cash first, Bank Transfer last (one-time)
+if ((hotelSettings.configVersion || 0) < 1) {
+  if (hotelSettings.paymentMethods?.length) {
+    const pm = hotelSettings.paymentMethods.filter(m => m !== 'Cash' && m !== 'Bank Transfer');
+    pm.unshift('Cash');
+    pm.push('Bank Transfer');
     hotelSettings.paymentMethods = pm;
-    saveHotelSettings();
   }
+  hotelSettings.configVersion = 1;
+  saveHotelSettings();
 }
 
 // Migrate hotelAddress string → split fields
@@ -231,7 +245,7 @@ const detectLanguageFromPhone = (phone) => {
 // ── VAT Rates — persisted in localStorage ───────────────────────────────────
 let vatRates = (() => {
   try {
-    const stored = localStorage.getItem('hotelVatRates');
+    const stored = localStorage.getItem(lsKey('hotelVatRates'));
     if (stored) return JSON.parse(stored);
   } catch (e) {}
   return [
@@ -241,7 +255,7 @@ let vatRates = (() => {
     { id: 'vat-4', rate: 21, label: 'Standard',       schedule: [] },
   ];
 })();
-const saveVatRates = () => localStorage.setItem('hotelVatRates', JSON.stringify(vatRates));
+const saveVatRates = () => localStorage.setItem(lsKey('hotelVatRates'), JSON.stringify(vatRates));
 
 // Helper: get effective VAT rate for a date (checks schedule entries)
 const getEffectiveVatRate = (baseRate, date) => {
@@ -259,7 +273,7 @@ const getEffectiveVatRate = (baseRate, date) => {
 // ── Room Type Catalog — persisted in localStorage ──────────────────────────
 let roomTypes = (() => {
   try {
-    const stored = localStorage.getItem('hotelRoomTypes');
+    const stored = localStorage.getItem(lsKey('hotelRoomTypes'));
     if (stored) return JSON.parse(stored);
   } catch (e) {}
   return [
@@ -271,7 +285,7 @@ let roomTypes = (() => {
     { id: 'rt-6', name: 'Deluxe Double',    shortCode: 'DLX', maxOccupancy: 2, baseOccupancy: 2, defaultRate: 140, extraPersonSupplement: 25, rooms: ['601','602'],                                     amenities: [], channexId: null },
   ];
 })();
-const saveRoomTypes = () => localStorage.setItem('hotelRoomTypes', JSON.stringify(roomTypes));
+const saveRoomTypes = () => localStorage.setItem(lsKey('hotelRoomTypes'), JSON.stringify(roomTypes));
 
 // Helper: get room type name from room number
 const getRoomTypeName = (roomNumber) => {
@@ -292,7 +306,7 @@ const getAllRooms = () => {
 // ── Rate Plans — persisted in localStorage ─────────────────────────────────
 let ratePlans = (() => {
   try {
-    const stored = localStorage.getItem('hotelRatePlans');
+    const stored = localStorage.getItem(lsKey('hotelRatePlans'));
     if (stored) return JSON.parse(stored);
   } catch (e) {}
   return [
@@ -301,12 +315,12 @@ let ratePlans = (() => {
     { id: 'rp-3', name: 'Non-Refundable',    shortCode: 'NR', includesBreakfast: false, cancellationPolicyId: 'cp-2', isRefundable: false, priceModifier: -15, channexId: null },
   ];
 })();
-const saveRatePlans = () => localStorage.setItem('hotelRatePlans', JSON.stringify(ratePlans));
+const saveRatePlans = () => localStorage.setItem(lsKey('hotelRatePlans'), JSON.stringify(ratePlans));
 
 // ── Cancellation Policies — persisted in localStorage ──────────────────────
 let cancellationPolicies = (() => {
   try {
-    const stored = localStorage.getItem('hotelCancellationPolicies');
+    const stored = localStorage.getItem(lsKey('hotelCancellationPolicies'));
     if (stored) return JSON.parse(stored);
   } catch (e) {}
   return [
@@ -314,12 +328,12 @@ let cancellationPolicies = (() => {
     { id: 'cp-2', name: 'Non-Refundable',  description: 'No cancellation, full prepayment required',    deadlineHours: 0,  penaltyType: 'full_stay',   penaltyValue: null },
   ];
 })();
-const saveCancellationPolicies = () => localStorage.setItem('hotelCancellationPolicies', JSON.stringify(cancellationPolicies));
+const saveCancellationPolicies = () => localStorage.setItem(lsKey('hotelCancellationPolicies'), JSON.stringify(cancellationPolicies));
 
 // ── Extras catalog — persisted in localStorage ──────────────────────────────
 let extrasCatalog = (() => {
   try {
-    const stored = localStorage.getItem('hotelExtrasCatalog');
+    const stored = localStorage.getItem(lsKey('hotelExtrasCatalog'));
     if (stored) return JSON.parse(stored);
   } catch (e) {}
   return [
@@ -340,7 +354,7 @@ let extrasCatalog = (() => {
     { id: 'ex-15', name: 'Safe',              defaultPrice: 3,  defaultVat: 6,  perPerson: false, perNight: true,  multipleBookable: false, dailyInventory: false, dailyInventoryLimit: 0,  breakfast: false, lunch: false, dinner: false, housekeepingList: false, bookingEngine: false, upsellOnlineCheckin: false, multipleBookableLimit: 1, priceSchedule: [], photo: '' },
   ];
 })();
-const saveExtrasCatalog = () => localStorage.setItem('hotelExtrasCatalog', JSON.stringify(extrasCatalog));
+const saveExtrasCatalog = () => localStorage.setItem(lsKey('hotelExtrasCatalog'), JSON.stringify(extrasCatalog));
 
 // Helper: get extra price for a given date (checks priceSchedule, falls back to defaultPrice)
 const getExtraPrice = (cat, date) => {
@@ -356,7 +370,7 @@ const getExtraPrice = (cat, date) => {
 // Company profiles (replaces old companyRegistry)
 let companyProfiles = (() => {
   try {
-    const stored = localStorage.getItem('hotelCompanyProfiles');
+    const stored = localStorage.getItem(lsKey('hotelCompanyProfiles'));
     if (stored) { const parsed = JSON.parse(stored); if (parsed.length > 0) return parsed; }
   } catch (e) {}
   return [
@@ -366,12 +380,12 @@ let companyProfiles = (() => {
     { id: 4, name: 'MediaMarkt NV', vatNumber: 'BE0446017985', peppolId: '', address: 'Wijnegem Shopping Center', zip: '2110', city: 'Wijnegem', country: 'BE', email: 'facturatie@mediamarkt.be', phone: '+32 3 354 56 78', language: 'nl', creditCard: null, priceAgreement: { amount: null, percentage: null }, source: 'direct', segment: 'corporate', notes: '', createdAt: Date.now(), updatedAt: Date.now() },
   ];
 })();
-const saveCompanyProfiles = () => localStorage.setItem('hotelCompanyProfiles', JSON.stringify(companyProfiles));
+const saveCompanyProfiles = () => localStorage.setItem(lsKey('hotelCompanyProfiles'), JSON.stringify(companyProfiles));
 
 // Guest profiles (replaces old guestRegistry)
 let guestProfiles = (() => {
   try {
-    const stored = localStorage.getItem('hotelGuestProfiles');
+    const stored = localStorage.getItem(lsKey('hotelGuestProfiles'));
     if (stored) { const parsed = JSON.parse(stored); if (parsed.length > 0) return parsed; }
   } catch (e) {}
   return [
@@ -385,54 +399,54 @@ let guestProfiles = (() => {
     { id: 'gp-8', firstName: 'Fernand', lastName: 'Goegebuer', email: 'fernand.goegebuer@yahoo.com', phone: '+32 472 80 90 00', language: 'nl', nationality: 'BE', idType: 'Driving License', idNumber: 'BE-DL-440317-008', dateOfBirth: null, notes: '', createdAt: Date.now(), updatedAt: Date.now() },
   ];
 })();
-const saveGuestProfiles = () => localStorage.setItem('hotelGuestProfiles', JSON.stringify(guestProfiles));
+const saveGuestProfiles = () => localStorage.setItem(lsKey('hotelGuestProfiles'), JSON.stringify(guestProfiles));
 
 // Booker profiles — auto-extracted from reservations via syncBookerProfiles()
 let bookerProfiles = (() => {
   try {
-    const stored = localStorage.getItem('hotelBookerProfiles');
+    const stored = localStorage.getItem(lsKey('hotelBookerProfiles'));
     if (stored) return JSON.parse(stored);
   } catch (e) {}
   return [];
 })();
-const saveBookerProfiles = () => localStorage.setItem('hotelBookerProfiles', JSON.stringify(bookerProfiles));
+const saveBookerProfiles = () => localStorage.setItem(lsKey('hotelBookerProfiles'), JSON.stringify(bookerProfiles));
 
 // Cash register (Kassa) entries — persisted to localStorage
 let cashRegister = (() => {
   try {
-    const stored = localStorage.getItem('hotelCashRegister');
+    const stored = localStorage.getItem(lsKey('hotelCashRegister'));
     if (stored) return JSON.parse(stored);
   } catch(e) {}
   return [];
 })();
-const saveCashRegister = () => localStorage.setItem('hotelCashRegister', JSON.stringify(cashRegister));
+const saveCashRegister = () => localStorage.setItem(lsKey('hotelCashRegister'), JSON.stringify(cashRegister));
 
 // ── Channel Manager Data — persisted in localStorage ─────────────────────────
 
 // Rate overrides: key = "roomTypeId:ratePlanId:YYYY-MM-DD" → price
 let channelRateOverrides = (() => {
   try {
-    const stored = localStorage.getItem('channelRateOverrides');
+    const stored = localStorage.getItem(lsKey('channelRateOverrides'));
     if (stored) return JSON.parse(stored);
   } catch(e) {}
   return {};
 })();
-const saveChannelRateOverrides = () => localStorage.setItem('channelRateOverrides', JSON.stringify(channelRateOverrides));
+const saveChannelRateOverrides = () => localStorage.setItem(lsKey('channelRateOverrides'), JSON.stringify(channelRateOverrides));
 
 // Restrictions: key = "roomTypeId:YYYY-MM-DD" → { minStay, maxStay, stopSell, cta, ctd }
 let channelRestrictions = (() => {
   try {
-    const stored = localStorage.getItem('channelRestrictions');
+    const stored = localStorage.getItem(lsKey('channelRestrictions'));
     if (stored) return JSON.parse(stored);
   } catch(e) {}
   return {};
 })();
-const saveChannelRestrictions = () => localStorage.setItem('channelRestrictions', JSON.stringify(channelRestrictions));
+const saveChannelRestrictions = () => localStorage.setItem(lsKey('channelRestrictions'), JSON.stringify(channelRestrictions));
 
 // OTA channel connections
 let channelOTAConnections = (() => {
   try {
-    const stored = localStorage.getItem('channelOTAConnections');
+    const stored = localStorage.getItem(lsKey('channelOTAConnections'));
     if (stored) return JSON.parse(stored);
   } catch(e) {}
   return [
@@ -444,12 +458,12 @@ let channelOTAConnections = (() => {
     { id: 'ch-6', name: 'HRS',            code: 'HRS', status: 'error',        lastSync: new Date(Date.now() - 86400000).toISOString(), commission: 12, rateModifier: 0,  channexChannelId: null, roomTypeMappings: {}, ratePlanMappings: {}, restrictionOverrides: {} },
   ];
 })();
-const saveChannelOTAConnections = () => localStorage.setItem('channelOTAConnections', JSON.stringify(channelOTAConnections));
+const saveChannelOTAConnections = () => localStorage.setItem(lsKey('channelOTAConnections'), JSON.stringify(channelOTAConnections));
 
 // Channel Manager activity log
 let channelActivityLog = (() => {
   try {
-    const stored = localStorage.getItem('channelActivityLog');
+    const stored = localStorage.getItem(lsKey('channelActivityLog'));
     if (stored) return JSON.parse(stored);
   } catch(e) {}
   // Seed with some demo log entries
@@ -465,12 +479,12 @@ let channelActivityLog = (() => {
     { id: 'log-8', timestamp: new Date(now - 172800000).toISOString(), type: 'booking',   channel: 'Expedia',      message: 'Reservation cancelled', details: 'EXP-472918 — Classic Twin, Feb 18-20' },
   ];
 })();
-const saveChannelActivityLog = () => localStorage.setItem('channelActivityLog', JSON.stringify(channelActivityLog));
+const saveChannelActivityLog = () => localStorage.setItem(lsKey('channelActivityLog'), JSON.stringify(channelActivityLog));
 
 // ── Smart Pricing — occupancy-based dynamic pricing ──────────────────────────
 let smartPricingConfig = (() => {
   try {
-    const stored = localStorage.getItem('smartPricingConfig');
+    const stored = localStorage.getItem(lsKey('smartPricingConfig'));
     if (stored) return JSON.parse(stored);
   } catch(e) {}
   return {
@@ -481,7 +495,7 @@ let smartPricingConfig = (() => {
     rules: [] // populated per room type: { roomTypeId, enabled, tiers: [{ minOcc, maxOcc, adjustment }] }
   };
 })();
-const saveSmartPricingConfig = () => localStorage.setItem('smartPricingConfig', JSON.stringify(smartPricingConfig));
+const saveSmartPricingConfig = () => localStorage.setItem(lsKey('smartPricingConfig'), JSON.stringify(smartPricingConfig));
 
 // ── Role Permissions ────────────────────────────────────────────────────────
 const ROLE_PERMISSIONS = {
@@ -497,7 +511,7 @@ const hasFeature = (role, feature) => ROLE_PERMISSIONS[role]?.features.includes(
 // ── Hotel Users ─────────────────────────────────────────────────────────────
 let hotelUsers = (() => {
   try {
-    const stored = localStorage.getItem('hotelUsers');
+    const stored = localStorage.getItem(lsKey('hotelUsers'));
     if (stored) { const parsed = JSON.parse(stored); if (parsed.length > 0) return parsed; }
   } catch (e) {}
   return [
@@ -509,7 +523,7 @@ let hotelUsers = (() => {
     { id: 'usr-5', name: 'Nina Peeters',     pin: '9000', role: 'receptionist', department: 'Reception',  color: '#2563eb', active: true, createdAt: Date.now(), updatedAt: Date.now() },
   ];
 })();
-const saveHotelUsers = () => { localStorage.setItem('hotelUsers', JSON.stringify(hotelUsers)); };
+const saveHotelUsers = () => { localStorage.setItem(lsKey('hotelUsers'), JSON.stringify(hotelUsers)); };
 
 // Ensure Jeffrey admin exists (migration for existing localStorage data)
 if (!hotelUsers.find(u => u.id === 'usr-0')) {
@@ -520,7 +534,7 @@ if (!hotelUsers.find(u => u.id === 'usr-0')) {
 // ── Email Templates — persisted in localStorage ─────────────────────────────
 let emailTemplates = (() => {
   try {
-    const stored = localStorage.getItem('hotelEmailTemplates');
+    const stored = localStorage.getItem(lsKey('hotelEmailTemplates'));
     if (stored) return JSON.parse(stored);
   } catch (e) {}
   return [
@@ -531,7 +545,7 @@ let emailTemplates = (() => {
   ];
 })();
 const saveEmailTemplates = () => {
-  localStorage.setItem('hotelEmailTemplates', JSON.stringify(emailTemplates));
+  localStorage.setItem(lsKey('hotelEmailTemplates'), JSON.stringify(emailTemplates));
   syncConfig('emailTemplates', emailTemplates);
 };
 

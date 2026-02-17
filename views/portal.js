@@ -7,24 +7,30 @@ const GuestPortal = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [attempts, setAttempts] = useState(0);
-  const [portalData, setPortalData] = useState(null); // { reservation, room, roomIndex }
+  const [portalData, setPortalData] = useState(null); // { reservation, room, roomIndex, hotelBranding? }
 
   // Extract code from URL hash if present: #/go?code=XX-0000
   useEffect(() => {
     const hash = window.location.hash;
     const match = hash.match(/code=([A-Z0-9-]+)/i);
     if (match) {
-      setPortalCode(match[1].toUpperCase());
-      // Auto-submit
-      setTimeout(() => {
-        const codeInput = document.getElementById('portal-code-input');
-        if (codeInput) codeInput.form?.requestSubmit?.();
-      }, 300);
+      const code = match[1].toUpperCase();
+      setPortalCode(code);
+      if (code.length >= 7) validateCode(code);
     }
   }, []);
 
-  const eb = hotelSettings.emailBranding || {};
+  // Use branding from Supabase lookup (multi-tenant) or fall back to local hotelSettings
+  const hs = portalData?.hotelBranding || hotelSettings;
+  const eb = hs.emailBranding || {};
   const pc = eb.primaryColor || '#171717';
+
+  // Sanitize logo URL — only allow http(s) and data URIs
+  const safeLogo = (url) => {
+    if (!url) return null;
+    if (url.startsWith('https://') || url.startsWith('http://') || url.startsWith('data:image/')) return url;
+    return null;
+  };
 
   const autoFormatCode = (val) => {
     let clean = val.toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -44,6 +50,7 @@ const GuestPortal = () => {
 
     // Check localStorage first
     let found = null;
+    let supabaseFailed = false;
     const now = new Date();
     for (const res of reservations) {
       for (let ri = 0; ri < (res.rooms || []).length; ri++) {
@@ -67,10 +74,11 @@ const GuestPortal = () => {
         if (result && result.reservation) {
           const resData = result.reservation;
           const room = (resData.rooms || [])[result.room_index || 0];
-          if (room) found = { reservation: resData, room, roomIndex: result.room_index || 0 };
+          if (room) found = { reservation: resData, room, roomIndex: result.room_index || 0, hotelBranding: result.hotelBranding };
         }
       } catch (e) {
         console.warn('[Portal] Supabase lookup failed:', e);
+        supabaseFailed = true;
       }
     }
 
@@ -78,7 +86,9 @@ const GuestPortal = () => {
     if (found) {
       setPortalData(found);
     } else {
-      setError('Invalid or expired code. Please check and try again.');
+      setError(supabaseFailed
+        ? 'Could not verify your code. Please check your internet connection and try again.'
+        : 'Invalid or expired code. Please check and try again.');
     }
   };
 
@@ -100,13 +110,15 @@ const GuestPortal = () => {
     return Math.max(1, Math.round((new Date(room.checkout) - new Date(room.checkin)) / 86400000));
   };
 
+  const logo = safeLogo(eb.logoUrl);
+
   // ── Code Entry Screen ─────────────────────────────────────────────────
   if (!portalData) {
     return (
       <div style={{minHeight: '100vh', background: '#fafafa', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: 'system-ui, -apple-system, sans-serif'}}>
         <div style={{background: '#fff', borderRadius: 24, boxShadow: '0 4px 24px rgba(0,0,0,0.08)', padding: '48px 40px', maxWidth: 420, width: '100%', textAlign: 'center'}}>
-          {eb.logoUrl && <img src={eb.logoUrl} alt="" style={{maxHeight: 56, maxWidth: 180, margin: '0 auto 16px'}} />}
-          <h1 style={{fontFamily: 'Georgia, serif', fontSize: 24, fontWeight: 'bold', color: '#111', margin: '0 0 4px'}}>{hotelSettings.hotelName || 'Welcome'}</h1>
+          {logo && <img src={logo} alt="" style={{maxHeight: 56, maxWidth: 180, margin: '0 auto 16px'}} />}
+          <h1 style={{fontFamily: 'Georgia, serif', fontSize: 24, fontWeight: 'bold', color: '#111', margin: '0 0 4px'}}>{hs.hotelName || 'Welcome'}</h1>
           <p style={{color: '#999', fontSize: 14, margin: '0 0 32px'}}>Enter your access code</p>
 
           <form onSubmit={e => { e.preventDefault(); if (portalCode.length >= 7) validateCode(portalCode); }}>
@@ -141,9 +153,16 @@ const GuestPortal = () => {
   return (
     <div style={{minHeight: '100vh', background: '#fafafa', fontFamily: 'system-ui, -apple-system, sans-serif'}}>
       {/* Header */}
-      <div style={{background: pc, padding: '20px 24px', textAlign: 'center'}}>
-        {eb.logoUrl && <img src={eb.logoUrl} alt="" style={{maxHeight: 40, maxWidth: 140, margin: '0 auto 8px', display: 'block'}} />}
-        <div style={{color: '#fff', fontFamily: 'Georgia, serif', fontSize: 18, fontWeight: 'bold'}}>{hotelSettings.hotelName || 'Hotel'}</div>
+      <div style={{background: pc, padding: '20px 24px', textAlign: 'center', position: 'relative'}}>
+        {logo && <img src={logo} alt="" style={{maxHeight: 40, maxWidth: 140, margin: '0 auto 8px', display: 'block'}} />}
+        <div style={{color: '#fff', fontFamily: 'Georgia, serif', fontSize: 18, fontWeight: 'bold'}}>{hs.hotelName || 'Hotel'}</div>
+        <button onClick={() => { setPortalData(null); setPortalCode(''); setError(''); setAttempts(0); }}
+          style={{position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)',
+            background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff',
+            padding: '6px 12px', borderRadius: 8, fontSize: 12, cursor: 'pointer'}}
+          title="Use a different code">
+          ✕
+        </button>
       </div>
 
       <div style={{maxWidth: 480, margin: '0 auto', padding: '24px 16px'}}>
@@ -192,7 +211,7 @@ const GuestPortal = () => {
               {res.extras.map((ex, i) => (
                 <div key={i} style={{display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#555', marginBottom: 4}}>
                   <span>{ex.name} x{ex.quantity}</span>
-                  <span>{hotelSettings.currency || 'EUR'} {(ex.quantity * ex.unitPrice).toFixed(2)}</span>
+                  <span>{hs.currency || 'EUR'} {(ex.quantity * ex.unitPrice).toFixed(2)}</span>
                 </div>
               ))}
             </div>
@@ -218,8 +237,8 @@ const GuestPortal = () => {
 
         {/* Footer */}
         <div style={{textAlign: 'center', padding: '32px 0 16px', fontSize: 12, color: '#ccc'}}>
-          <div style={{marginBottom: 4}}>{hotelSettings.hotelName} · {hotelSettings.hotelPhone}</div>
-          <div>{hotelSettings.hotelEmail}</div>
+          <div style={{marginBottom: 4}}>{hs.hotelName} · {hs.hotelPhone}</div>
+          <div>{hs.hotelEmail}</div>
           <div style={{marginTop: 12, fontSize: 10, color: '#ddd'}}>Powered by Rumo</div>
         </div>
       </div>

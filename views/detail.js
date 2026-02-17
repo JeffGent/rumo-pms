@@ -1410,7 +1410,7 @@ const ReservationDetailView = (props) => {
                                               targetRes.checkout = new Date(Math.max(...targetRes.rooms.map(r => new Date(r.checkout))));
                                               targetRes.activityLog = targetRes.activityLog || [];
                                               targetRes.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Room ${movedRoom.roomNumber} received from ${ed.bookingRef}`, user: currentUser?.name || 'System' });
-                                              try { localStorage.setItem('hotelReservations', JSON.stringify(reservations)); } catch (e) {}
+                                              try { localStorage.setItem(lsKey('hotelReservations'), JSON.stringify(reservations)); } catch (e) {}
                                             }
                                             setChangeRoomTarget(null);
                                             setToastMessage(`Room ${movedRoom.roomNumber} moved to ${target.bookingRef}`);
@@ -3565,16 +3565,14 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + confirmed
                         )}
                         <button onClick={() => {
                           const next = JSON.parse(JSON.stringify(ed));
-                          const newCode = generatePortalCode(next, ri);
-                          next.rooms[ri].guestPortalCode = newCode;
-                          const now = new Date();
-                          next.rooms[ri].portalCodeValidFrom = now.toISOString();
-                          const co = next.rooms[ri].checkout ? new Date(next.rooms[ri].checkout) : null;
-                          if (co) { co.setDate(co.getDate() + 3); next.rooms[ri].portalCodeValidUntil = co.toISOString(); }
-                          next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Portal code ${code ? 'regenerated' : 'generated'}: ${newCode} (Room ${room.roomNumber})`, user: currentUser?.name || 'System' });
+                          const result = generatePortalCode(next, ri);
+                          next.rooms[ri].guestPortalCode = result.code;
+                          next.rooms[ri].portalCodeValidFrom = result.validFrom;
+                          next.rooms[ri].portalCodeValidUntil = result.validUntil;
+                          next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Portal code ${code ? 'regenerated' : 'generated'}: ${result.code} (Room ${room.roomNumber})`, user: currentUser?.name || 'System' });
                           setEditingReservation(next);
-                          syncPortalCode(newCode, ed.bookingRef, ri, next.rooms[ri].portalCodeValidFrom, next.rooms[ri].portalCodeValidUntil);
-                          setToastMessage(`Portal code ${code ? 'regenerated' : 'generated'}: ${newCode}`);
+                          syncPortalCode(result.code, ed.bookingRef, ri, result.validFrom, result.validUntil);
+                          setToastMessage(`Portal code ${code ? 'regenerated' : 'generated'}: ${result.code}`);
                         }}
                           className="px-2.5 py-1 text-xs font-medium bg-neutral-100 text-neutral-600 rounded-lg hover:bg-neutral-200 transition-colors">
                           {code ? 'Regenerate' : 'Generate'}
@@ -3620,10 +3618,12 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + confirmed
                               const next = JSON.parse(JSON.stringify(ed));
                               for (let ri = 0; ri < next.rooms.length; ri++) {
                                 if (!next.rooms[ri].guestPortalCode) {
-                                  const newCode = generatePortalCode(next, ri);
-                                  next.rooms[ri].guestPortalCode = newCode;
-                                  next.activityLog.push({ id: Date.now() + ri, timestamp: Date.now(), action: `Portal code auto-generated: ${newCode} (Room ${next.rooms[ri].roomNumber})`, user: currentUser?.name || 'System' });
-                                  syncPortalCode(newCode, next.bookingRef, ri, next.rooms[ri].portalCodeValidFrom, next.rooms[ri].portalCodeValidUntil);
+                                  const result = generatePortalCode(next, ri);
+                                  next.rooms[ri].guestPortalCode = result.code;
+                                  next.rooms[ri].portalCodeValidFrom = result.validFrom;
+                                  next.rooms[ri].portalCodeValidUntil = result.validUntil;
+                                  next.activityLog.push({ id: Date.now() + ri, timestamp: Date.now(), action: `Portal code auto-generated: ${result.code} (Room ${next.rooms[ri].roomNumber})`, user: currentUser?.name || 'System' });
+                                  syncPortalCode(result.code, next.bookingRef, ri, result.validFrom, result.validUntil);
                                 }
                               }
                               setEditingReservation(next);

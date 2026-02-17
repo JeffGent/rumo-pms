@@ -35,12 +35,12 @@ const ModernHotelPMS = () => {
   });
   const [calendarActiveFilter, setCalendarActiveFilter] = useState('all');
   const [calColWidth, setCalColWidth] = useState(() => {
-    try { const v = localStorage.getItem('calColWidth'); if (v) return Number(v); } catch(e) {}
+    try { const v = localStorage.getItem(lsKey('calColWidth')); if (v) return Number(v); } catch(e) {}
     return 155;
   });
   const [calDatePickerOpen, setCalDatePickerOpen] = useState(false);
   const [calViewMode, setCalViewMode] = useState(() => {
-    try { const v = localStorage.getItem('calViewMode'); if (v === 'week' || v === 'month') return v; } catch(e) {}
+    try { const v = localStorage.getItem(lsKey('calViewMode')); if (v === 'week' || v === 'month') return v; } catch(e) {}
     return 'month';
   });
   const [checkedInRooms, setCheckedInRooms] = useState({});
@@ -106,7 +106,7 @@ const ModernHotelPMS = () => {
 
   const [housekeepingStatus, setHousekeepingStatus] = useState(() => {
     try {
-      const stored = localStorage.getItem('housekeepingStatus');
+      const stored = localStorage.getItem(lsKey('housekeepingStatus'));
       if (stored) {
         return JSON.parse(stored);
       }
@@ -124,7 +124,7 @@ const ModernHotelPMS = () => {
 
   // Persist calColWidth to localStorage
   useEffect(() => {
-    try { localStorage.setItem('calColWidth', String(calColWidth)); } catch(e) {}
+    try { localStorage.setItem(lsKey('calColWidth'), String(calColWidth)); } catch(e) {}
   }, [calColWidth]);
 
   // Close calendar date picker on outside click
@@ -249,7 +249,7 @@ const ModernHotelPMS = () => {
           if (newValue) {
             setHousekeepingStatus(prev => {
               const next = { ...prev, [resId]: 'dirty' };
-              try { localStorage.setItem('housekeepingStatus', JSON.stringify(next)); } catch(e) {}
+              try { localStorage.setItem(lsKey('housekeepingStatus'), JSON.stringify(next)); } catch(e) {}
               return next;
             });
             // Show billing warning if issues exist
@@ -474,7 +474,7 @@ const ModernHotelPMS = () => {
   // Sla housekeeping status op in localStorage bij wijzigingen
   useEffect(() => {
     try {
-      localStorage.setItem('housekeepingStatus', JSON.stringify(housekeepingStatus));
+      localStorage.setItem(lsKey('housekeepingStatus'), JSON.stringify(housekeepingStatus));
     } catch (e) {
       console.error('Error saving housekeeping status:', e);
     }

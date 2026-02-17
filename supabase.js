@@ -58,9 +58,10 @@ const syncAllReservations = async (resList) => {
     const rawRows = resList
       .filter(res => res.bookingRef && typeof res.bookingRef === 'string' && res.bookingRef.trim() !== '')
       .map(res => ({
+        hotel_id: HOTEL_ID,
         booking_ref: res.bookingRef,
-        checkin: res.checkin instanceof Date ? res.checkin.toISOString().slice(0, 10) : (res.checkin || '').slice(0, 10),
-        checkout: res.checkout instanceof Date ? res.checkout.toISOString().slice(0, 10) : (res.checkout || '').slice(0, 10),
+        checkin: toDateStr(res.checkin),
+        checkout: toDateStr(res.checkout),
         status: res.reservationStatus || 'confirmed',
         guest_name: res.guest || `${res.booker?.firstName || ''} ${res.booker?.lastName || ''}`.trim(),
         data: res,
@@ -94,9 +95,10 @@ const syncReservation = async (res) => {
     setSyncStatus('syncing');
     try {
       await restUpsert('reservations', [{
+        hotel_id: HOTEL_ID,
         booking_ref: res.bookingRef,
-        checkin: res.checkin instanceof Date ? res.checkin.toISOString().slice(0, 10) : (res.checkin || '').slice(0, 10),
-        checkout: res.checkout instanceof Date ? res.checkout.toISOString().slice(0, 10) : (res.checkout || '').slice(0, 10),
+        checkin: toDateStr(res.checkin),
+        checkout: toDateStr(res.checkout),
         status: res.reservationStatus || 'confirmed',
         guest_name: res.guest || `${res.booker?.firstName || ''} ${res.booker?.lastName || ''}`.trim(),
         data: res,
@@ -114,7 +116,7 @@ const syncReservation = async (res) => {
 const syncConfig = (key, data) => {
   debounce(`cfg-${key}`, async () => {
     try {
-      await restUpsert('config', [{ key, data, updated_at: new Date().toISOString() }], 'key');
+      await restUpsert('config', [{ hotel_id: HOTEL_ID, key, data, updated_at: new Date().toISOString() }], 'key');
     } catch (e) {
       console.error(`[Supabase] Config sync failed (${key}):`, e);
     }
@@ -128,6 +130,7 @@ const syncProfiles = (table, profiles) => {
   debounce(`prof-${table}`, async () => {
     try {
       const rows = dedup(profiles.map(p => ({
+        hotel_id: HOTEL_ID,
         id: String(p.id),
         data: p,
         updated_at: new Date().toISOString(),
@@ -142,28 +145,28 @@ const syncProfiles = (table, profiles) => {
 
 // ── Convenience: save reservations to localStorage + Supabase ───────────────
 const saveReservations = () => {
-  try { localStorage.setItem('hotelReservations', JSON.stringify(reservations)); } catch (e) {}
+  try { localStorage.setItem(lsKey('hotelReservations'), JSON.stringify(reservations)); } catch (e) {}
   debounce('all-res', () => syncAllReservations(reservations), 2000);
 };
 
 const saveReservationSingle = (res) => {
-  try { localStorage.setItem('hotelReservations', JSON.stringify(reservations)); } catch (e) {}
+  try { localStorage.setItem(lsKey('hotelReservations'), JSON.stringify(reservations)); } catch (e) {}
   syncReservation(res);
 };
 
 // ── Pull from Supabase (fresh instance) ─────────────────────────────────────
 const pullFromSupabase = async () => {
-  if (localStorage.getItem('supabaseSeeded')) return false;
+  if (localStorage.getItem(lsKey('supabaseSeeded'))) return false;
 
   console.log('[Supabase] Fresh instance detected — pulling data from cloud...');
   setSyncStatus('syncing');
 
   try {
     // 1. Pull config
-    const configs = await restGet('config', 'select=key,data');
+    const configs = await restGet('config', `hotel_id=eq.${HOTEL_ID}&select=key,data`);
     if (configs.length === 0) {
       console.log('[Supabase] No config in cloud, using defaults');
-      localStorage.setItem('supabaseSeeded', String(Date.now()));
+      localStorage.setItem(lsKey('supabaseSeeded'), String(Date.now()));
       setSyncStatus('idle');
       return false;
     }
@@ -181,22 +184,22 @@ const pullFromSupabase = async () => {
     console.log('[Supabase] Config pulled:', Object.keys(cfgMap).join(', '));
 
     // 2. Pull reservations
-    const resRows = await restGet('reservations', 'select=data&order=booking_ref');
+    const resRows = await restGet('reservations', `hotel_id=eq.${HOTEL_ID}&select=data&order=booking_ref`);
     if (resRows.length > 0) {
       const pulled = resRows.map(r => r.data);
       try {
-        localStorage.setItem('hotelReservations', JSON.stringify(pulled));
-        localStorage.setItem('hotelDataVersion', typeof DATA_VERSION !== 'undefined' ? String(DATA_VERSION) : '27');
+        localStorage.setItem(lsKey('hotelReservations'), JSON.stringify(pulled));
+        localStorage.setItem(lsKey('hotelDataVersion'), typeof DATA_VERSION !== 'undefined' ? String(DATA_VERSION) : '27');
       } catch (e) {}
       console.log(`[Supabase] Pulled ${resRows.length} reservations`);
     }
 
     // 3. Pull profiles
-    const pullProf = async (table, lsKey) => {
+    const pullProf = async (table, storageKey) => {
       try {
-        const rows = await restGet(table, 'select=data');
+        const rows = await restGet(table, `hotel_id=eq.${HOTEL_ID}&select=data`);
         if (rows.length > 0) {
-          localStorage.setItem(lsKey, JSON.stringify(rows.map(r => r.data)));
+          localStorage.setItem(lsKey(storageKey), JSON.stringify(rows.map(r => r.data)));
           console.log(`[Supabase] Pulled ${rows.length} ${table}`);
         }
       } catch (e) { console.warn(`[Supabase] Pull ${table}:`, e.message); }
@@ -206,13 +209,12 @@ const pullFromSupabase = async () => {
     await pullProf('booker_profiles', 'hotelBookerProfiles');
 
     // Mark as seeded, reload to re-initialize everything from pulled localStorage
-    localStorage.setItem('supabaseSeeded', String(Date.now()));
+    localStorage.setItem(lsKey('supabaseSeeded'), String(Date.now()));
     console.log('[Supabase] Pull complete — reloading...');
     window.location.reload();
     return true;
   } catch (e) {
     console.error('[Supabase] Pull failed:', e);
-    localStorage.setItem('supabaseSeeded', String(Date.now()));
     setSyncStatus('error');
     return false;
   }
@@ -222,7 +224,7 @@ const pullFromSupabase = async () => {
 const initialSync = async () => {
   // Check connectivity with a direct fetch
   try {
-    const res = await fetch(`${REST_URL}/config?select=key&limit=1`, {
+    const res = await fetch(`${REST_URL}/config?hotel_id=eq.${HOTEL_ID}&select=key&limit=1`, {
       headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` }
     });
     if (!res.ok) throw new Error(`${res.status}`);
@@ -243,22 +245,22 @@ const initialSync = async () => {
 
   try {
     await restUpsert('config', [
-      { key: 'hotelSettings', data: hotelSettings, updated_at: new Date().toISOString() },
-      { key: 'roomTypes', data: roomTypes, updated_at: new Date().toISOString() },
-      { key: 'ratePlans', data: ratePlans, updated_at: new Date().toISOString() },
-      { key: 'cancellationPolicies', data: cancellationPolicies, updated_at: new Date().toISOString() },
-      { key: 'extrasCatalog', data: extrasCatalog, updated_at: new Date().toISOString() },
-      { key: 'vatRates', data: vatRates, updated_at: new Date().toISOString() },
-      { key: 'hotelUsers', data: hotelUsers, updated_at: new Date().toISOString() },
+      { hotel_id: HOTEL_ID, key: 'hotelSettings', data: hotelSettings, updated_at: new Date().toISOString() },
+      { hotel_id: HOTEL_ID, key: 'roomTypes', data: roomTypes, updated_at: new Date().toISOString() },
+      { hotel_id: HOTEL_ID, key: 'ratePlans', data: ratePlans, updated_at: new Date().toISOString() },
+      { hotel_id: HOTEL_ID, key: 'cancellationPolicies', data: cancellationPolicies, updated_at: new Date().toISOString() },
+      { hotel_id: HOTEL_ID, key: 'extrasCatalog', data: extrasCatalog, updated_at: new Date().toISOString() },
+      { hotel_id: HOTEL_ID, key: 'vatRates', data: vatRates, updated_at: new Date().toISOString() },
+      { hotel_id: HOTEL_ID, key: 'hotelUsers', data: hotelUsers, updated_at: new Date().toISOString() },
     ], 'key');
   } catch (e) { console.error('[Supabase] Config sync:', e); }
 
   const profSync = async (table, list) => {
-    const rows = dedup(list.map(p => ({ id: String(p.id), data: p, updated_at: new Date().toISOString() })));
+    const rows = dedup(list.map(p => ({ hotel_id: HOTEL_ID, id: String(p.id), data: p, updated_at: new Date().toISOString() })));
     if (rows.length === 0) { console.log(`[Supabase] ${table}: skipped (0 rows)`); return; }
     console.log(`[Supabase] ${table}: upserting ${rows.length} rows...`);
     await restUpsert(table, rows, 'id');
-    const verify = await restGet(table, 'select=id&limit=1');
+    const verify = await restGet(table, `hotel_id=eq.${HOTEL_ID}&select=id&limit=1`);
     console.log(`[Supabase] ${table}: upsert done, verify read=${verify.length} rows ${verify.length === 0 ? '⚠️ RLS BLOCKING? Check Supabase → Authentication → Policies' : '✓'}`);
   };
 
@@ -270,22 +272,40 @@ const initialSync = async () => {
 
 // ── Portal code sync ────────────────────────────────────────────────────────
 /*
- * SQL for the table:
- * create table if not exists guest_portal_codes (
- *   code text primary key,
- *   booking_ref text not null,
- *   room_index integer not null default 0,
+ * SQL for the table (run in Supabase SQL Editor):
+ *
+ * -- Add hotel_id to existing tables (multi-tenant prep):
+ * ALTER TABLE reservations ADD COLUMN IF NOT EXISTS hotel_id text NOT NULL DEFAULT 'default';
+ * ALTER TABLE config ADD COLUMN IF NOT EXISTS hotel_id text NOT NULL DEFAULT 'default';
+ * ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS hotel_id text NOT NULL DEFAULT 'default';
+ * ALTER TABLE guest_profiles ADD COLUMN IF NOT EXISTS hotel_id text NOT NULL DEFAULT 'default';
+ * ALTER TABLE booker_profiles ADD COLUMN IF NOT EXISTS hotel_id text NOT NULL DEFAULT 'default';
+ *
+ * CREATE INDEX IF NOT EXISTS idx_reservations_hotel ON reservations(hotel_id);
+ * CREATE INDEX IF NOT EXISTS idx_config_hotel ON config(hotel_id);
+ * CREATE INDEX IF NOT EXISTS idx_company_profiles_hotel ON company_profiles(hotel_id);
+ * CREATE INDEX IF NOT EXISTS idx_guest_profiles_hotel ON guest_profiles(hotel_id);
+ * CREATE INDEX IF NOT EXISTS idx_booker_profiles_hotel ON booker_profiles(hotel_id);
+ *
+ * -- Portal codes table:
+ * CREATE TABLE IF NOT EXISTS guest_portal_codes (
+ *   code text PRIMARY KEY,
+ *   hotel_id text NOT NULL DEFAULT 'default',
+ *   booking_ref text NOT NULL,
+ *   room_index integer NOT NULL DEFAULT 0,
  *   valid_from timestamptz,
  *   valid_until timestamptz,
- *   created_at timestamptz default now()
+ *   created_at timestamptz DEFAULT now()
  * );
- * alter table guest_portal_codes enable row level security;
- * create policy "anon_full_access" on guest_portal_codes for all using (true) with check (true);
- * create index idx_portal_codes_booking on guest_portal_codes(booking_ref);
+ * ALTER TABLE guest_portal_codes ENABLE ROW LEVEL SECURITY;
+ * CREATE POLICY "anon_full_access" ON guest_portal_codes FOR ALL USING (true) WITH CHECK (true);
+ * CREATE INDEX idx_portal_codes_booking ON guest_portal_codes(booking_ref);
+ * CREATE INDEX idx_portal_codes_hotel ON guest_portal_codes(hotel_id);
  */
 const syncPortalCode = async (code, bookingRef, roomIndex, validFrom, validUntil) => {
   try {
     await restUpsert('guest_portal_codes', [{
+      hotel_id: HOTEL_ID,
       code,
       booking_ref: bookingRef,
       room_index: roomIndex,
@@ -300,15 +320,24 @@ const syncPortalCode = async (code, bookingRef, roomIndex, validFrom, validUntil
 
 const lookupPortalCode = async (code) => {
   try {
+    // Portal codes are globally unique — lookup without hotel_id filter (guest doesn't know it)
     const rows = await restGet('guest_portal_codes', `code=eq.${encodeURIComponent(code)}&select=*`);
     if (rows.length === 0) return null;
     const row = rows[0];
     const now = new Date();
     if (row.valid_from && new Date(row.valid_from) > now) return null;
     if (row.valid_until && new Date(row.valid_until) < now) return null;
-    const resRows = await restGet('reservations', `booking_ref=eq.${encodeURIComponent(row.booking_ref)}&select=data`);
+    // Use hotel_id from the portal code row to scope the reservation lookup
+    const hid = row.hotel_id || HOTEL_ID;
+    const resRows = await restGet('reservations', `hotel_id=eq.${hid}&booking_ref=eq.${encodeURIComponent(row.booking_ref)}&select=data`);
     if (resRows.length === 0) return null;
-    return { ...row, reservation: resRows[0].data };
+    // Also pull hotel branding (hotelSettings config) for this tenant
+    let hotelBranding = null;
+    try {
+      const cfgRows = await restGet('config', `hotel_id=eq.${hid}&key=eq.hotelSettings&select=data`);
+      if (cfgRows.length > 0) hotelBranding = cfgRows[0].data;
+    } catch (e) { /* branding is optional */ }
+    return { ...row, reservation: resRows[0].data, hotelBranding };
   } catch (e) {
     console.error('[Supabase] Portal code lookup failed:', e);
     return null;
@@ -317,7 +346,7 @@ const lookupPortalCode = async (code) => {
 
 // ── Force pull (console helper) ────────────────────────────────────────────
 window.forcePull = () => {
-  localStorage.removeItem('supabaseSeeded');
+  localStorage.removeItem(lsKey('supabaseSeeded'));
   console.log('[Supabase] supabaseSeeded removed — reloading to trigger pull...');
   location.reload();
 };

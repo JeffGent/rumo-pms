@@ -133,13 +133,13 @@ const generatePortalCode = (reservation, roomIndex = 0) => {
     attempts++;
   }
 
-  // Store on room
-  room.guestPortalCode = code;
+  // Return code + validity range — caller is responsible for storing on room + setState
   const ci = room.checkin ? new Date(room.checkin) : new Date();
-  room.portalCodeValidFrom = new Date(ci.getTime() - 48 * 60 * 60 * 1000).toISOString();
-  room.portalCodeValidUntil = new Date(new Date(room.checkout || ci).getTime() + 24 * 60 * 60 * 1000).toISOString();
-
-  return code;
+  return {
+    code,
+    validFrom: new Date(ci.getTime() - 48 * 60 * 60 * 1000).toISOString(),
+    validUntil: new Date(new Date(room.checkout || ci).getTime() + 24 * 60 * 60 * 1000).toISOString(),
+  };
 };
 
 /** Get the full portal URL for a given code */

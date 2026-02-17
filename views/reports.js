@@ -115,12 +115,12 @@ const ReportsView = (props) => {
 
       // Saved presets
       const [savedPresets, setSavedPresets] = useState(() => {
-        try { const s = localStorage.getItem('hotelReportPresets'); return s ? JSON.parse(s) : []; } catch(e) { return []; }
+        try { const s = localStorage.getItem(lsKey('hotelReportPresets')); return s ? JSON.parse(s) : []; } catch(e) { return []; }
       });
       const [presetName, setPresetName] = useState('');
       const [showSavePreset, setShowSavePreset] = useState(false);
 
-      const savePresetsToStorage = (presets) => { localStorage.setItem('hotelReportPresets', JSON.stringify(presets)); setSavedPresets(presets); };
+      const savePresetsToStorage = (presets) => { localStorage.setItem(lsKey('hotelReportPresets'), JSON.stringify(presets)); setSavedPresets(presets); };
 
       const getCurrentFilters = () => ({ fDateFrom, fDateTo, fStatus, fSource, fRoomType, fRoom, fPurpose, fPriceMin, fPriceMax, fOutstanding, fNoInvoice, fUnlinkedPayments });
 

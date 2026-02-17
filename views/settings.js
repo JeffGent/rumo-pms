@@ -17,7 +17,7 @@ const SettingsView = (props) => {
   // Email template editor state
   const [localTemplates, setLocalTemplates] = useState(() => JSON.parse(JSON.stringify(emailTemplates)));
   const [editingTemplate, setEditingTemplate] = useState(null);
-  const [templateEditorTab, setTemplateEditorTab] = useState('visual');
+  const [templateEditorTab, setTemplateEditorTab] = useState('preview');
   const [emailPreviewHtml, setEmailPreviewHtml] = useState(null);
 
   // Helper: count active reservations for a room number
@@ -1130,20 +1130,28 @@ const SettingsView = (props) => {
 
             {/* Editor tabs */}
             <div className="flex gap-2 mb-3 border-b border-neutral-200">
-              {['visual', 'source', 'plaintext'].map(tab => (
+              {['preview', 'source', 'plaintext'].map(tab => (
                 <button key={tab} onClick={() => setTemplateEditorTab(tab)}
                   className={`px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors ${templateEditorTab === tab ? 'border-neutral-900 text-neutral-900' : 'border-transparent text-neutral-400 hover:text-neutral-600'}`}>
-                  {tab === 'visual' ? 'Visual' : tab === 'source' ? 'Source Code' : 'Plain Text'}
+                  {tab === 'preview' ? 'Preview' : tab === 'source' ? 'Source Code' : 'Plain Text'}
                 </button>
               ))}
             </div>
 
-            {templateEditorTab === 'visual' && (
+            {templateEditorTab === 'preview' && (
               <div>
-                <textarea value={(() => { try { return htmlToPlaintext(editingTemplate.bodyHtml); } catch(e) { return ''; } })()} readOnly
-                  className="w-full h-48 px-3 py-2 border border-neutral-200 rounded-lg text-sm bg-neutral-50 text-neutral-600 resize-y"
-                  placeholder="Visual preview of the HTML template. Edit in Source Code tab." />
-                <p className="text-[10px] text-neutral-400 mt-1">Read-only preview. Switch to Source Code to edit HTML, or Plain Text for the text-only version.</p>
+                <div className="border border-neutral-200 rounded-xl overflow-hidden">
+                  <iframe
+                    srcDoc={resolveTemplateVariables(editingTemplate.bodyHtml || '', reservations[0] || {
+                      booker: { firstName: 'John', lastName: 'Doe', email: 'john@example.com' },
+                      rooms: [{ checkin: '2026-03-15', checkout: '2026-03-18', roomType: 'Deluxe Double', roomNumber: '201', nightPrices: [{amount: 150}, {amount: 150}, {amount: 150}], guests: [{ firstName: 'John', lastName: 'Doe' }] }],
+                      bookingRef: 'RMO-00001', extras: [], payments: [], invoices: [],
+                    })}
+                    style={{width: '100%', height: 400, border: 'none'}}
+                    sandbox=""
+                    title="Email Preview" />
+                </div>
+                <p className="text-[10px] text-neutral-400 mt-1">Live preview with sample data. Switch to Source Code to edit HTML.</p>
               </div>
             )}
 
@@ -1272,6 +1280,19 @@ const SettingsView = (props) => {
                       className="px-3 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-100 rounded-lg transition-colors">
                       Edit
                     </button>
+                    {tpl.id.startsWith('tpl-custom-') && (
+                      <button onClick={() => {
+                        if (!confirm(`Delete template "${tpl.name}"?`)) return;
+                        const next = localTemplates.filter(t => t.id !== tpl.id);
+                        setLocalTemplates(next);
+                        emailTemplates.length = 0; emailTemplates.push(...next); saveEmailTemplates();
+                        if (editingTemplate?.id === tpl.id) setEditingTemplate(null);
+                        setToastMessage('Template deleted');
+                      }}
+                        className="px-2 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                        Delete
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

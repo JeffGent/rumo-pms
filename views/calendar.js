@@ -426,12 +426,12 @@ const CalendarView = (props) => {
                 left: calViewMode === 'week' ? '2px' : 'calc(50%)',
                 transition: 'left 250ms cubic-bezier(0.4, 0, 0.2, 1)',
               }} />
-              <button onClick={() => { setCalViewMode('week'); try { localStorage.setItem('calViewMode', 'week'); } catch(e) {} }}
+              <button onClick={() => { setCalViewMode('week'); try { localStorage.setItem(lsKey('calViewMode'), 'week'); } catch(e) {} }}
                 className="relative z-10 px-2.5 py-1 text-xs font-medium rounded-md transition-colors duration-200"
                 style={{ color: calViewMode === 'week' ? '#171717' : '#737373', flex: 1 }}>
                 Week
               </button>
-              <button onClick={() => { setCalViewMode('month'); try { localStorage.setItem('calViewMode', 'month'); } catch(e) {} }}
+              <button onClick={() => { setCalViewMode('month'); try { localStorage.setItem(lsKey('calViewMode'), 'month'); } catch(e) {} }}
                 className="relative z-10 px-2.5 py-1 text-xs font-medium rounded-md transition-colors duration-200"
                 style={{ color: calViewMode === 'month' ? '#171717' : '#737373', flex: 1 }}>
                 Month

@@ -23,6 +23,8 @@ const addDays = (date, days) => {
 };
 
 // VIES VAT lookup with CORS proxy fallback
+// TODO PRODUCTION: Replace corsproxy.io with own backend proxy (Supabase Edge Function)
+// to avoid third-party dependency and rate limits.
 const fetchVIES = (countryCode, vatNum) => {
   const viesUrl = `https://ec.europa.eu/taxation_customs/vies/rest-api/ms/${countryCode}/vat/${vatNum}`;
   return fetch(`https://corsproxy.io/?${encodeURIComponent(viesUrl)}`)
@@ -44,8 +46,8 @@ const deriveReservationDates = (res) => {
   if (!res.rooms || res.rooms.length === 0) return;
   const checkins = res.rooms.map(r => new Date(r.checkin)).filter(d => !isNaN(d));
   const checkouts = res.rooms.map(r => new Date(r.checkout)).filter(d => !isNaN(d));
-  if (checkins.length > 0) res.checkin = new Date(Math.min(...checkins));
-  if (checkouts.length > 0) res.checkout = new Date(Math.max(...checkouts));
+  if (checkins.length > 0) res.checkin = new Date(Math.min(...checkins)).toISOString();
+  if (checkouts.length > 0) res.checkout = new Date(Math.max(...checkouts)).toISOString();
 };
 
 // Build flat room entries: explode multi-room reservations into 1 entry per room

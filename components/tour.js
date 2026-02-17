@@ -122,7 +122,7 @@ const SpotlightTour = ({ tourId, onComplete }) => {
   const pad = 12;
 
   const close = () => {
-    try { localStorage.setItem(`tourCompleted_${tourId}`, 'true'); } catch (e) {}
+    try { localStorage.setItem(lsKey(`tourCompleted_${tourId}`), 'true'); } catch (e) {}
     if (onComplete) onComplete();
   };
   closeRef.current = close;

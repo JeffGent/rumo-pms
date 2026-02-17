@@ -361,8 +361,8 @@ const DATA_VERSION = 33;
 // Laad of genereer reserveringen met localStorage persistentie
 const getReservations = () => {
   try {
-    const storedVersion = localStorage.getItem('hotelDataVersion');
-    const stored = localStorage.getItem('hotelReservations');
+    const storedVersion = localStorage.getItem(lsKey('hotelDataVersion'));
+    const stored = localStorage.getItem(lsKey('hotelReservations'));
     if (stored && storedVersion === String(DATA_VERSION)) {
       const parsed = JSON.parse(stored);
       // Validate and sanitize on load — skip corrupt entries instead of crashing
@@ -398,8 +398,8 @@ const getReservations = () => {
 
   const newReservations = generateReservations();
   try {
-    localStorage.setItem('hotelReservations', JSON.stringify(newReservations));
-    localStorage.setItem('hotelDataVersion', String(DATA_VERSION));
+    localStorage.setItem(lsKey('hotelReservations'), JSON.stringify(newReservations));
+    localStorage.setItem(lsKey('hotelDataVersion'), String(DATA_VERSION));
   } catch (e) {
     console.error('Error saving reservations:', e);
   }

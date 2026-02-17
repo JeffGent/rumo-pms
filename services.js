@@ -186,7 +186,7 @@ const ReservationService = {
 
   // ── Reservation Validation ─────────────────────────────────────────────
 
-  /** Validate a reservation object. Returns array of issues (empty = valid). */
+  /** Pure validation — returns array of issues (empty = valid). Does NOT mutate. */
   validateReservation(res) {
     const issues = [];
     if (!res) { issues.push('Reservation is null'); return issues; }
@@ -210,11 +210,16 @@ const ReservationService = {
         }
       });
     }
+    return issues;
+  },
+
+  /** Ensure required arrays exist on a reservation (mutates in-place). */
+  normalizeReservation(res) {
+    if (!res) return;
     if (!res.activityLog) res.activityLog = [];
     if (!res.extras) res.extras = [];
     if (!res.payments) res.payments = [];
     if (!res.invoices) res.invoices = [];
-    return issues;
   },
 
 };
