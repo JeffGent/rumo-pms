@@ -389,7 +389,7 @@ const CalendarView = (props) => {
           </div>
         </aside>
         <div className="cal-view">
-        <div className="flex items-center justify-between px-5 py-2.5 border-b border-neutral-200 bg-white flex-shrink-0">
+        <div className="flex items-center justify-between pl-5 pr-[93px] py-2.5 border-b border-neutral-200 bg-white flex-shrink-0">
           <div className="flex items-center gap-4">
             <div className="flex gap-2">
               {filterTabs.map(tab => (

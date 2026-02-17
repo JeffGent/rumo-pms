@@ -209,21 +209,7 @@ const ModernHotelPMS = () => {
     if (!editingReservation) return;
     const idx = reservations.findIndex(r => r.id === editingReservation.id);
     if (idx === -1) return;
-    // Derive reservation-level status from room statuses
-    const roomStatuses = (editingReservation.rooms || []).map(r => r.status || 'confirmed');
-    let derivedStatus = editingReservation.reservationStatus;
-    if (roomStatuses.length === 1) {
-      // Single room: reservation always follows room
-      derivedStatus = roomStatuses[0];
-    } else if (roomStatuses.length > 1) {
-      const allSame = roomStatuses.every(s => s === roomStatuses[0]);
-      if (allSame) {
-        // All rooms same status: reservation follows
-        derivedStatus = roomStatuses[0];
-      }
-      // Mixed statuses: keep current reservation status (don't override)
-    }
-    // Update module-level array so other views (HK, calendar, etc.) see the changes
+    const derivedStatus = ReservationService.deriveReservationStatus(editingReservation.rooms, editingReservation.reservationStatus);
     const updated = {
       ...editingReservation,
       reservationStatus: derivedStatus,
@@ -233,43 +219,15 @@ const ModernHotelPMS = () => {
         checkout: room.checkout ? new Date(room.checkout) : new Date(editingReservation.checkout)
       }))
     };
-    // Derive reservation-level dates from room dates
     deriveReservationDates(updated);
     reservations[idx] = updated;
-    // Persist to localStorage + Supabase
     saveReservationSingle(updated);
   }, [editingReservation]);
 
   // Helper: check billing issues on checkout
   const showCheckoutWarning = (res) => {
-    const roomTotal = (res.rooms || []).reduce((sum, rm) => {
-      if (rm.priceType === 'fixed') return sum + (rm.fixedPrice || 0);
-      return sum + (rm.nightPrices || []).reduce((s, n) => s + (n.amount || 0), 0);
-    }, 0);
-    const extrasTotal = (res.extras || []).reduce((sum, ex) => sum + (ex.quantity || 0) * (ex.unitPrice || 0), 0);
-    const totalAmount = roomTotal + extrasTotal;
-    if (totalAmount <= 0) return;
-
-    const parts = [];
-    // Check 1: Uninvoiced
-    const invoicedAmount = (res.invoices || [])
-      .filter(inv => inv.status !== 'credited' && inv.type !== 'proforma' && inv.type !== 'credit')
-      .reduce((s, inv) => s + inv.amount, 0);
-    const uninvoiced = Math.max(0, totalAmount - invoicedAmount);
-    if (uninvoiced > 0.01) parts.push(`EUR ${uninvoiced.toFixed(2)} uninvoiced`);
-
-    // Check 2: Unpaid
-    const paidAmount = (res.payments || []).filter(p => p.status === 'completed').reduce((s, p) => s + p.amount, 0);
-    const unpaid = Math.max(0, totalAmount - paidAmount);
-    if (unpaid > 0.01) parts.push(`EUR ${unpaid.toFixed(2)} unpaid`);
-
-    // Check 3: Unlinked payments
-    const unlinkedCount = (res.payments || []).filter(p => p.status === 'completed' && !p.linkedInvoice).length;
-    if (unlinkedCount > 0) parts.push(`${unlinkedCount} unlinked payment${unlinkedCount > 1 ? 's' : ''}`);
-
-    if (parts.length > 0) {
-      setWarningToast({ message: parts.join(' · '), resId: res.id });
-    }
+    const warning = ReservationService.validateCheckout(res);
+    if (warning) setWarningToast({ message: warning, resId: res.id });
   };
 
   // Helper: toggle check-in/check-out from dashboard/calendar and persist to reservation
@@ -297,28 +255,11 @@ const ModernHotelPMS = () => {
             // Show billing warning if issues exist
             showCheckoutWarning(reservations[idx]);
             // Auto-charge VCC on checkout
-            const res = reservations[idx];
-            const bp = bookerProfiles.find(b =>
-              (b.email && b.email === res.booker?.email) ||
-              (b.firstName === res.booker?.firstName && b.lastName === res.booker?.lastName)
-            );
-            if (bp?.creditCard?.isVCC) {
-              const roomTotal = (res.rooms || []).reduce((sum, rm) => rm.priceType === 'fixed' ? sum + (rm.fixedPrice || 0) : sum + (rm.nightPrices || []).reduce((s, n) => s + (n.amount || 0), 0), 0);
-              const extrasTotal = (res.extras || []).reduce((sum, ex) => sum + (ex.quantity || 0) * (ex.unitPrice || 0), 0);
-              const totalAmt = roomTotal + extrasTotal;
-              const paidAmt = (res.payments || []).filter(p => p.status === 'completed').reduce((s, p) => s + p.amount, 0);
-              const outstanding = Math.max(0, totalAmt - paidAmt);
-              if (outstanding > 0) {
-                const maxPid = (res.payments || []).reduce((m, p) => Math.max(m, p.id || 0), 0);
-                reservations[idx].payments = [...(res.payments || []), {
-                  id: maxPid + 1, date: new Date().toISOString().split('T')[0],
-                  amount: Math.round(outstanding * 100) / 100,
-                  method: `VCC (\u2022\u2022\u2022\u2022 ${bp.creditCard.last4})`,
-                  note: 'Auto-charged VCC on checkout', status: 'completed', linkedInvoice: null,
-                }];
-                setToastMessage(`VCC charged: EUR ${outstanding.toFixed(2)}`);
-                saveReservationSingle(reservations[idx]);
-              }
+            const vccPayment = ReservationService.createVCCAutoCharge(reservations[idx], bookerProfiles);
+            if (vccPayment) {
+              reservations[idx].payments = [...(reservations[idx].payments || []), vccPayment];
+              setToastMessage(`VCC charged: EUR ${vccPayment.amount.toFixed(2)}`);
+              saveReservationSingle(reservations[idx]);
             }
           }
         } else {
@@ -332,11 +273,10 @@ const ModernHotelPMS = () => {
         }
         // Activity log
         if (!reservations[idx].activityLog) reservations[idx].activityLog = [];
-        if (isDeparting) {
-          reservations[idx].activityLog.push({ id: Date.now(), timestamp: Date.now(), action: newValue ? 'Checked out' : 'Check-out undone', user: currentUser?.name || 'System' });
-        } else {
-          reservations[idx].activityLog.push({ id: Date.now(), timestamp: Date.now(), action: newValue ? `Checked in at ${newValue}` : 'Check-in undone', user: currentUser?.name || 'System' });
-        }
+        const logAction = isDeparting
+          ? (newValue ? 'Checked out' : 'Check-out undone')
+          : (newValue ? `Checked in at ${newValue}` : 'Check-in undone');
+        reservations[idx].activityLog.push(ReservationService.createLogEntry(logAction, currentUser?.name));
         saveReservationSingle(reservations[idx]);
       }
       return { ...prev, [resId]: newValue };
@@ -380,47 +320,9 @@ const ModernHotelPMS = () => {
   // Option auto-cancel: check every 30 seconds for expired options
   useEffect(() => {
     const checkExpired = () => {
-      const now = new Date();
-      let changed = false;
-      reservations.forEach(res => {
-        // Reservation-level expiry
-        if (res.reservationStatus === 'option' && res.optionExpiry) {
-          const expiry = new Date(res.optionExpiry);
-          if (expiry <= now) {
-            res.reservationStatus = 'cancelled';
-            res.optionExpiry = null;
-            res.rooms.forEach(room => { room.status = 'cancelled'; room.optionExpiry = null; });
-            res.activityLog = res.activityLog || [];
-            res.activityLog.push({ id: Date.now(), timestamp: now.getTime(), action: 'Option expired → auto-cancelled', user: 'System' });
-            changed = true;
-          }
-        }
-        // Room-level expiry (individual rooms can expire independently)
-        if (res.rooms) {
-          res.rooms.forEach(room => {
-            if (room.status === 'option' && room.optionExpiry) {
-              const expiry = new Date(room.optionExpiry);
-              if (expiry <= now) {
-                room.status = 'cancelled';
-                room.optionExpiry = null;
-                changed = true;
-              }
-            }
-          });
-          // If all rooms are cancelled after room-level expiry, cancel the reservation too
-          if (res.rooms.length > 0 && res.rooms.every(r => r.status === 'cancelled') && res.reservationStatus !== 'cancelled') {
-            res.reservationStatus = 'cancelled';
-            res.optionExpiry = null;
-            res.activityLog = res.activityLog || [];
-            res.activityLog.push({ id: Date.now(), timestamp: now.getTime(), action: 'All rooms expired → auto-cancelled', user: 'System' });
-            changed = true;
-          }
-        }
-      });
-      if (changed) {
+      if (ReservationService.processExpiredOptions(reservations)) {
         saveReservations();
-        setToastMessage('Option(s) expired — reservation auto-cancelled');
-        // If currently viewing an expired reservation, refresh the editing copy
+        setToastMessage('Option(s) expired \u2014 reservation auto-cancelled');
         if (selectedReservation) {
           const fresh = reservations.find(r => r.id === selectedReservation.id);
           if (fresh && fresh.reservationStatus === 'cancelled') {
@@ -430,35 +332,20 @@ const ModernHotelPMS = () => {
       }
     };
     const timer = setInterval(checkExpired, 30000);
-    checkExpired(); // Run once immediately
+    checkExpired();
     return () => clearInterval(timer);
   }, [selectedReservation]);
 
-  // Reminder auto-fire: check every 30 seconds for due reminders
+  // Reminder auto-fire: check every 10 seconds for due reminders
   useEffect(() => {
     const checkReminders = () => {
-      const now = new Date();
-      let changed = false;
-      reservations.forEach(res => {
-        if (!res.reminders) return;
-        res.reminders.forEach(rem => {
-          if (!rem.toastShown && !rem.fired && new Date(rem.dueDate) <= now) {
-            rem.toastShown = true;
-            const guestName = res.guest || res.booker?.firstName || 'Reservation';
-            setToastMessage(`${guestName}: ${rem.message}`);
-            res.activityLog = res.activityLog || [];
-            res.activityLog.push({ id: Date.now(), timestamp: now.getTime(), action: `Reminder fired: "${rem.message}"`, user: 'System' });
-            changed = true;
-          }
-        });
-      });
-      if (changed) {
+      const fired = ReservationService.processDueReminders(reservations);
+      if (fired.length > 0) {
+        fired.forEach(f => setToastMessage(f.message));
         saveReservations();
         if (selectedReservation) {
           const fresh = reservations.find(r => r.id === selectedReservation.id);
-          if (fresh) {
-            setSelectedReservation({ ...fresh, checkin: new Date(fresh.checkin), checkout: new Date(fresh.checkout) });
-          }
+          if (fresh) setSelectedReservation({ ...fresh, checkin: new Date(fresh.checkin), checkout: new Date(fresh.checkout) });
         }
         if (editingReservation) {
           const freshEd = reservations.find(r => r.id === editingReservation.id);
@@ -638,6 +525,15 @@ const ModernHotelPMS = () => {
     showCheckoutWarning, toggleCheckInOut, setTime,
     currentUser, handleLogout, userMenuOpen, setUserMenuOpen,
   };
+
+  // Guest Portal — standalone route, no login required
+  const [isPortalRoute, setIsPortalRoute] = useState(() => window.location.hash.startsWith('#/go'));
+  useEffect(() => {
+    const onHash = () => setIsPortalRoute(window.location.hash.startsWith('#/go'));
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+  if (isPortalRoute) return <GuestPortal />;
 
   // Main render with view switching
   if (!isLoggedIn) {
@@ -841,18 +737,18 @@ const ModernHotelPMS = () => {
       {/* Main Content - View Switching */}
       <div className="pb-16 md:pb-0">
       {selectedReservation ? (
-        <ReservationDetailView {...vp} />
+        <ErrorBoundary name="Reservation Detail"><ReservationDetailView {...vp} /></ErrorBoundary>
       ) : (
         <>
-          {activePage === 'dashboard' && <DashboardView {...vp} />}
-          {activePage === 'calendar' && <CalendarView {...vp} />}
-          {activePage === 'housekeeping' && <HousekeepingView {...vp} />}
-          {activePage === 'fb' && <FBView {...vp} />}
-          {activePage === 'profiles' && <ProfilesView {...vp} />}
-          {activePage === 'reports' && <ReportsView {...vp} />}
-          {activePage === 'payments' && <PaymentsView {...vp} />}
-          {activePage === 'channelmanager' && <ChannelManagerView {...vp} />}
-          {activePage === 'settings' && <SettingsView {...vp} />}
+          {activePage === 'dashboard' && <ErrorBoundary name="Dashboard"><DashboardView {...vp} /></ErrorBoundary>}
+          {activePage === 'calendar' && <ErrorBoundary name="Calendar"><CalendarView {...vp} /></ErrorBoundary>}
+          {activePage === 'housekeeping' && <ErrorBoundary name="Housekeeping"><HousekeepingView {...vp} /></ErrorBoundary>}
+          {activePage === 'fb' && <ErrorBoundary name="F&B"><FBView {...vp} /></ErrorBoundary>}
+          {activePage === 'profiles' && <ErrorBoundary name="Profiles"><ProfilesView {...vp} /></ErrorBoundary>}
+          {activePage === 'reports' && <ErrorBoundary name="Reports"><ReportsView {...vp} /></ErrorBoundary>}
+          {activePage === 'payments' && <ErrorBoundary name="Payments"><PaymentsView {...vp} /></ErrorBoundary>}
+          {activePage === 'channelmanager' && <ErrorBoundary name="Channel Manager"><ChannelManagerView {...vp} /></ErrorBoundary>}
+          {activePage === 'settings' && <ErrorBoundary name="Settings"><SettingsView {...vp} /></ErrorBoundary>}
         </>
       )}
       </div>

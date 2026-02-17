@@ -268,6 +268,53 @@ const initialSync = async () => {
   console.log('[Supabase] Initial sync complete');
 };
 
+// ── Portal code sync ────────────────────────────────────────────────────────
+/*
+ * SQL for the table:
+ * create table if not exists guest_portal_codes (
+ *   code text primary key,
+ *   booking_ref text not null,
+ *   room_index integer not null default 0,
+ *   valid_from timestamptz,
+ *   valid_until timestamptz,
+ *   created_at timestamptz default now()
+ * );
+ * alter table guest_portal_codes enable row level security;
+ * create policy "anon_full_access" on guest_portal_codes for all using (true) with check (true);
+ * create index idx_portal_codes_booking on guest_portal_codes(booking_ref);
+ */
+const syncPortalCode = async (code, bookingRef, roomIndex, validFrom, validUntil) => {
+  try {
+    await restUpsert('guest_portal_codes', [{
+      code,
+      booking_ref: bookingRef,
+      room_index: roomIndex,
+      valid_from: validFrom,
+      valid_until: validUntil,
+      created_at: new Date().toISOString(),
+    }], 'code');
+  } catch (e) {
+    console.error('[Supabase] Portal code sync failed:', e);
+  }
+};
+
+const lookupPortalCode = async (code) => {
+  try {
+    const rows = await restGet('guest_portal_codes', `code=eq.${encodeURIComponent(code)}&select=*`);
+    if (rows.length === 0) return null;
+    const row = rows[0];
+    const now = new Date();
+    if (row.valid_from && new Date(row.valid_from) > now) return null;
+    if (row.valid_until && new Date(row.valid_until) < now) return null;
+    const resRows = await restGet('reservations', `booking_ref=eq.${encodeURIComponent(row.booking_ref)}&select=data`);
+    if (resRows.length === 0) return null;
+    return { ...row, reservation: resRows[0].data };
+  } catch (e) {
+    console.error('[Supabase] Portal code lookup failed:', e);
+    return null;
+  }
+};
+
 // ── Force pull (console helper) ────────────────────────────────────────────
 window.forcePull = () => {
   localStorage.removeItem('supabaseSeeded');

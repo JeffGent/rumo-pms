@@ -14,6 +14,11 @@ const SettingsView = (props) => {
   const [dragIdx, setDragIdx] = useState(null);
   const [dragOverIdx, setDragOverIdx] = useState(null);
   const [removeWarning, setRemoveWarning] = useState(null);
+  // Email template editor state
+  const [localTemplates, setLocalTemplates] = useState(() => JSON.parse(JSON.stringify(emailTemplates)));
+  const [editingTemplate, setEditingTemplate] = useState(null);
+  const [templateEditorTab, setTemplateEditorTab] = useState('visual');
+  const [emailPreviewHtml, setEmailPreviewHtml] = useState(null);
 
   // Helper: count active reservations for a room number
   const getReservationCountForRoom = (roomNumber) =>
@@ -122,6 +127,7 @@ const SettingsView = (props) => {
     { id: 'cancellation', label: 'Cancellation' },
     ...(currentUser?.role === 'admin' ? [{ id: 'users', label: 'Users' }] : []),
     { id: 'channex', label: 'Channel Manager' },
+    { id: 'email', label: 'Email' },
   ];
 
   const inputClass = 'w-full px-3 py-2 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent';
@@ -1006,6 +1012,326 @@ const SettingsView = (props) => {
             </div>
           </div>
           <p className="text-[10px] text-neutral-400 mt-3">{localSettings.autoClose?.enabled ? 'In production this will run automatically via a server-side scheduler. Use "Apply Now" in Channel Manager for manual trigger.' : 'Enable the toggle to activate automatic stop sell.'}</p>
+        </div>
+      </>)}
+
+      {/* ── Email Templates Tab ──────────────────────────────────────────── */}
+      {settingsTab === 'email' && (<>
+        {/* Branding */}
+        <div className="bg-white border border-neutral-200 rounded-2xl p-6 mb-4">
+          <h3 className="text-sm font-semibold text-neutral-900 mb-4">Email Branding</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className={labelClass}>Logo</label>
+              {localSettings.emailBranding?.logoUrl && (
+                <div className="mb-2 p-2 bg-neutral-50 rounded-lg inline-block">
+                  <img src={localSettings.emailBranding.logoUrl} alt="Logo" style={{maxHeight: 48, maxWidth: 160}} />
+                </div>
+              )}
+              <input type="file" accept="image/*" className="block text-xs text-neutral-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-neutral-200 file:text-xs file:font-medium file:bg-neutral-50 file:text-neutral-700 hover:file:bg-neutral-100"
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = (ev) => {
+                    setLocalSettings(prev => ({ ...prev, emailBranding: { ...prev.emailBranding, logoUrl: ev.target.result } }));
+                    setDirty(true);
+                  };
+                  reader.readAsDataURL(file);
+                }} />
+            </div>
+            <div>
+              <label className={labelClass}>Sender Name</label>
+              <input value={localSettings.emailBranding?.senderName || ''} onChange={e => { setLocalSettings(prev => ({ ...prev, emailBranding: { ...prev.emailBranding, senderName: e.target.value } })); setDirty(true); }} placeholder={localSettings.hotelName || 'Hotel name'} className={inputClass} />
+              <label className={`${labelClass} mt-3`}>Reply-to Email</label>
+              <input value={localSettings.emailBranding?.replyToEmail || ''} onChange={e => { setLocalSettings(prev => ({ ...prev, emailBranding: { ...prev.emailBranding, replyToEmail: e.target.value } })); setDirty(true); }} placeholder={localSettings.hotelEmail || 'info@hotel.com'} className={inputClass} />
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-4 mb-4">
+            <div>
+              <label className={labelClass}>Primary Color</label>
+              <div className="flex items-center gap-2">
+                <input type="color" value={localSettings.emailBranding?.primaryColor || '#171717'} onChange={e => { setLocalSettings(prev => ({ ...prev, emailBranding: { ...prev.emailBranding, primaryColor: e.target.value } })); setDirty(true); }} className="w-8 h-8 rounded-lg border border-neutral-200 cursor-pointer" />
+                <span className="text-xs text-neutral-500 font-mono">{localSettings.emailBranding?.primaryColor || '#171717'}</span>
+              </div>
+            </div>
+            <div>
+              <label className={labelClass}>Accent Color</label>
+              <div className="flex items-center gap-2">
+                <input type="color" value={localSettings.emailBranding?.accentColor || '#f59e0b'} onChange={e => { setLocalSettings(prev => ({ ...prev, emailBranding: { ...prev.emailBranding, accentColor: e.target.value } })); setDirty(true); }} className="w-8 h-8 rounded-lg border border-neutral-200 cursor-pointer" />
+                <span className="text-xs text-neutral-500 font-mono">{localSettings.emailBranding?.accentColor || '#f59e0b'}</span>
+              </div>
+            </div>
+            <div>
+              <label className={labelClass}>Background</label>
+              <div className="flex items-center gap-2">
+                <input type="color" value={localSettings.emailBranding?.backgroundColor || '#ffffff'} onChange={e => { setLocalSettings(prev => ({ ...prev, emailBranding: { ...prev.emailBranding, backgroundColor: e.target.value } })); setDirty(true); }} className="w-8 h-8 rounded-lg border border-neutral-200 cursor-pointer" />
+                <span className="text-xs text-neutral-500 font-mono">{localSettings.emailBranding?.backgroundColor || '#ffffff'}</span>
+              </div>
+            </div>
+          </div>
+          <div>
+            <label className={labelClass}>Footer Text</label>
+            <input value={localSettings.emailBranding?.footerText || ''} onChange={e => { setLocalSettings(prev => ({ ...prev, emailBranding: { ...prev.emailBranding, footerText: e.target.value } })); setDirty(true); }} placeholder={`${localSettings.hotelName} · ${localSettings.hotelStreet} · ${localSettings.hotelZip} ${localSettings.hotelCity}`} className={inputClass} />
+          </div>
+          <div className="grid grid-cols-3 gap-4 mt-4">
+            <div><label className={labelClass}>Facebook URL</label><input value={localSettings.emailBranding?.socialLinks?.facebook || ''} onChange={e => { setLocalSettings(prev => ({ ...prev, emailBranding: { ...prev.emailBranding, socialLinks: { ...prev.emailBranding?.socialLinks, facebook: e.target.value } } })); setDirty(true); }} placeholder="https://facebook.com/..." className={inputClass} /></div>
+            <div><label className={labelClass}>Instagram URL</label><input value={localSettings.emailBranding?.socialLinks?.instagram || ''} onChange={e => { setLocalSettings(prev => ({ ...prev, emailBranding: { ...prev.emailBranding, socialLinks: { ...prev.emailBranding?.socialLinks, instagram: e.target.value } } })); setDirty(true); }} placeholder="https://instagram.com/..." className={inputClass} /></div>
+            <div><label className={labelClass}>Website URL</label><input value={localSettings.emailBranding?.socialLinks?.website || ''} onChange={e => { setLocalSettings(prev => ({ ...prev, emailBranding: { ...prev.emailBranding, socialLinks: { ...prev.emailBranding?.socialLinks, website: e.target.value } } })); setDirty(true); }} placeholder="https://..." className={inputClass} /></div>
+          </div>
+        </div>
+
+        {/* Templates List / Editor */}
+        {editingTemplate ? (
+          <div className="bg-white border border-neutral-200 rounded-2xl p-6 mb-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-neutral-900">Edit Template: {editingTemplate.name}</h3>
+              <button onClick={() => setEditingTemplate(null)} className="text-xs text-neutral-500 hover:text-neutral-700">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><path d="M18 6 6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className={labelClass}>Template Name</label>
+                <input value={editingTemplate.name} onChange={e => setEditingTemplate(prev => ({ ...prev, name: e.target.value }))} className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>Subject Line</label>
+                <input value={editingTemplate.subject} onChange={e => setEditingTemplate(prev => ({ ...prev, subject: e.target.value }))} className={inputClass} />
+              </div>
+            </div>
+
+            {/* Variable insert helper */}
+            <div className="mb-3">
+              <label className={labelClass}>Insert Variable</label>
+              <div className="flex flex-wrap gap-1">
+                {[
+                  { group: 'Hotel', vars: ['hotel_name','hotel_email','hotel_phone'] },
+                  { group: 'Booking', vars: ['booking_ref','checkin_date','checkout_date','num_nights','room_type','room_number','total_price','currency','paid_amount','outstanding_amount'] },
+                  { group: 'Guest', vars: ['booker_firstname','booker_lastname','guest_fullname'] },
+                  { group: 'Portal', vars: ['portal_code','portal_url','portal_link','payment_link'] },
+                  { group: 'Invoice', vars: ['invoice_number','invoice_date','invoice_total'] },
+                ].map(g => (
+                  <div key={g.group} className="flex items-center gap-1">
+                    <span className="text-[10px] text-neutral-400 font-medium">{g.group}:</span>
+                    {g.vars.map(v => (
+                      <button key={v} onClick={() => {
+                        const tag = `{{${v}}}`;
+                        navigator.clipboard.writeText(tag);
+                        setToastMessage(`Copied ${tag}`);
+                      }} className="px-1.5 py-0.5 text-[10px] font-mono bg-neutral-100 hover:bg-neutral-200 rounded text-neutral-600 transition-colors">
+                        {v}
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Editor tabs */}
+            <div className="flex gap-2 mb-3 border-b border-neutral-200">
+              {['visual', 'source', 'plaintext'].map(tab => (
+                <button key={tab} onClick={() => setTemplateEditorTab(tab)}
+                  className={`px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors ${templateEditorTab === tab ? 'border-neutral-900 text-neutral-900' : 'border-transparent text-neutral-400 hover:text-neutral-600'}`}>
+                  {tab === 'visual' ? 'Visual' : tab === 'source' ? 'Source Code' : 'Plain Text'}
+                </button>
+              ))}
+            </div>
+
+            {templateEditorTab === 'visual' && (
+              <div>
+                <textarea value={(() => { try { return htmlToPlaintext(editingTemplate.bodyHtml); } catch(e) { return ''; } })()} readOnly
+                  className="w-full h-48 px-3 py-2 border border-neutral-200 rounded-lg text-sm bg-neutral-50 text-neutral-600 resize-y"
+                  placeholder="Visual preview of the HTML template. Edit in Source Code tab." />
+                <p className="text-[10px] text-neutral-400 mt-1">Read-only preview. Switch to Source Code to edit HTML, or Plain Text for the text-only version.</p>
+              </div>
+            )}
+
+            {templateEditorTab === 'source' && (
+              <div>
+                <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-2 flex items-center gap-2">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-amber-600 flex-shrink-0"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  <span className="text-[11px] text-amber-800">Advanced: editing HTML directly. Use table-based layout with inline styles for email compatibility.</span>
+                </div>
+                <textarea value={editingTemplate.bodyHtml || ''} onChange={e => setEditingTemplate(prev => ({ ...prev, bodyHtml: e.target.value }))}
+                  className="w-full h-64 px-3 py-2 border border-neutral-200 rounded-lg text-xs font-mono bg-neutral-900 text-emerald-400 resize-y"
+                  spellCheck={false} />
+              </div>
+            )}
+
+            {templateEditorTab === 'plaintext' && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-neutral-500">Plain text version (for OTA relay emails)</span>
+                  <button onClick={() => {
+                    setEditingTemplate(prev => ({ ...prev, bodyPlaintext: htmlToPlaintext(prev.bodyHtml) }));
+                    setToastMessage('Plain text generated from HTML');
+                  }} className="text-[11px] text-neutral-500 hover:text-neutral-700 underline">Generate from HTML</button>
+                </div>
+                <textarea value={editingTemplate.bodyPlaintext || ''} onChange={e => setEditingTemplate(prev => ({ ...prev, bodyPlaintext: e.target.value }))}
+                  className="w-full h-48 px-3 py-2 border border-neutral-200 rounded-lg text-xs font-mono resize-y" />
+              </div>
+            )}
+
+            {/* Auto-send settings */}
+            <div className="flex items-center gap-4 mt-4 pt-4 border-t border-neutral-100">
+              <label className="flex items-center gap-2 text-xs text-neutral-700">
+                <button onClick={() => setEditingTemplate(prev => ({ ...prev, autoSend: !prev.autoSend }))}
+                  className={`relative w-8 h-4.5 rounded-full transition-colors ${editingTemplate.autoSend ? 'bg-emerald-500' : 'bg-neutral-300'}`}
+                  style={{width: 32, height: 18}}>
+                  <span className={`absolute top-0.5 w-3.5 h-3.5 bg-white rounded-full shadow transition-transform`}
+                    style={{width: 14, height: 14, left: editingTemplate.autoSend ? 16 : 2}} />
+                </button>
+                Auto-send
+              </label>
+              {editingTemplate.autoSend && (<>
+                <select value={editingTemplate.triggerEvent || 'manual'} onChange={e => setEditingTemplate(prev => ({ ...prev, triggerEvent: e.target.value }))} className="text-xs border border-neutral-200 rounded-lg px-2 py-1.5">
+                  <option value="booking_created">On booking created</option>
+                  <option value="pre_checkin">Before check-in</option>
+                  <option value="checkout">On check-out</option>
+                  <option value="manual">Manual only</option>
+                </select>
+                {editingTemplate.triggerEvent === 'pre_checkin' && (
+                  <div className="flex items-center gap-1">
+                    <input type="number" value={Math.abs(editingTemplate.triggerOffset || 48)} onChange={e => setEditingTemplate(prev => ({ ...prev, triggerOffset: -Math.abs(Number(e.target.value)) }))}
+                      className="w-16 text-xs border border-neutral-200 rounded-lg px-2 py-1.5" min="1" max="168" />
+                    <span className="text-xs text-neutral-500">hours before</span>
+                  </div>
+                )}
+              </>)}
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex items-center justify-between mt-4 pt-4 border-t border-neutral-100">
+              <div className="flex gap-2">
+                <button onClick={() => {
+                  setEmailPreviewHtml(resolveTemplateVariables(editingTemplate.bodyHtml, reservations[0] || {}));
+                }} className="px-3 py-1.5 text-xs font-medium text-neutral-600 bg-neutral-100 hover:bg-neutral-200 rounded-lg transition-colors">
+                  Preview
+                </button>
+                <button onClick={() => setToastMessage(`Test email would be sent to ${hotelSettings.hotelEmail}`)}
+                  className="px-3 py-1.5 text-xs font-medium text-neutral-600 bg-neutral-100 hover:bg-neutral-200 rounded-lg transition-colors">
+                  Send Test
+                </button>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => setEditingTemplate(null)}
+                  className="px-4 py-2 text-xs font-medium text-neutral-600 hover:bg-neutral-100 rounded-lg transition-colors">
+                  Cancel
+                </button>
+                <button onClick={() => {
+                  const idx = localTemplates.findIndex(t => t.id === editingTemplate.id);
+                  if (idx !== -1) {
+                    const next = [...localTemplates];
+                    next[idx] = { ...editingTemplate, updatedAt: Date.now() };
+                    setLocalTemplates(next);
+                  }
+                  emailTemplates.length = 0;
+                  emailTemplates.push(...(idx !== -1 ? localTemplates.map((t, i) => i === idx ? { ...editingTemplate, updatedAt: Date.now() } : t) : localTemplates));
+                  saveEmailTemplates();
+                  setToastMessage('Template saved');
+                  setEditingTemplate(null);
+                }} className="px-4 py-2 text-xs font-medium bg-neutral-900 text-white rounded-lg hover:bg-neutral-800 transition-colors">
+                  Save Template
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-white border border-neutral-200 rounded-2xl p-6 mb-4">
+            <h3 className="text-sm font-semibold text-neutral-900 mb-4">Email Templates</h3>
+            <div className="space-y-2">
+              {localTemplates.map((tpl, i) => (
+                <div key={tpl.id} className="flex items-center justify-between p-3 border border-neutral-100 rounded-xl hover:bg-neutral-50 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <span className={`px-2 py-0.5 text-[10px] font-medium rounded-full ${
+                      tpl.type === 'confirmation' ? 'bg-emerald-100 text-emerald-700' :
+                      tpl.type === 'pre-checkin' ? 'bg-blue-100 text-blue-700' :
+                      tpl.type === 'invoice' ? 'bg-amber-100 text-amber-700' :
+                      tpl.type === 'checkout' ? 'bg-purple-100 text-purple-700' :
+                      'bg-neutral-100 text-neutral-600'
+                    }`}>{tpl.type}</span>
+                    <div>
+                      <div className="text-sm font-medium text-neutral-900">{tpl.name}</div>
+                      <div className="text-[11px] text-neutral-400">{tpl.subject}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {tpl.autoSend && (
+                      <span className="text-[10px] text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Auto</span>
+                    )}
+                    <button onClick={() => {
+                      const next = [...localTemplates];
+                      next[i] = { ...next[i], active: !next[i].active };
+                      setLocalTemplates(next);
+                      emailTemplates.length = 0; emailTemplates.push(...next); saveEmailTemplates();
+                    }} className={`relative w-8 rounded-full transition-colors ${tpl.active ? 'bg-emerald-500' : 'bg-neutral-300'}`} style={{width: 32, height: 18}}>
+                      <span className="absolute top-0.5 bg-white rounded-full shadow" style={{width: 14, height: 14, left: tpl.active ? 16 : 2, transition: 'left 200ms'}} />
+                    </button>
+                    <button onClick={() => setEditingTemplate(JSON.parse(JSON.stringify(tpl)))}
+                      className="px-3 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-100 rounded-lg transition-colors">
+                      Edit
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button onClick={() => {
+              const newTpl = { id: `tpl-custom-${Date.now()}`, name: 'New Template', type: 'custom', subject: '{{hotel_name}}', bodyHtml: buildEmailHtml('<h2 style="font-family:Georgia,serif;font-size:22px;color:#111;margin:0 0 16px;">Your heading here</h2>\n<p style="font-size:14px;line-height:1.6;color:#555;">Dear {{booker_firstname}},</p>'), bodyPlaintext: '', isCustomHtml: false, active: true, autoSend: false, triggerEvent: 'manual', triggerOffset: 0, updatedAt: Date.now() };
+              setLocalTemplates(prev => [...prev, newTpl]);
+              setEditingTemplate(newTpl);
+            }} className="mt-3 w-full py-2.5 border border-dashed border-neutral-300 rounded-xl text-xs font-medium text-neutral-500 hover:text-neutral-700 hover:border-neutral-400 transition-colors">
+              + Add Custom Template
+            </button>
+          </div>
+        )}
+
+        {/* Email Preview Modal */}
+        {emailPreviewHtml && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setEmailPreviewHtml(null)}>
+            <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-5 py-3 border-b border-neutral-200">
+                <span className="text-sm font-semibold text-neutral-900">Email Preview</span>
+                <button onClick={() => setEmailPreviewHtml(null)} className="p-1 hover:bg-neutral-100 rounded-lg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+              </div>
+              <div className="flex-1 overflow-auto p-1">
+                <iframe srcDoc={emailPreviewHtml} style={{width: '100%', height: 500, border: 'none'}} sandbox="" title="Email Preview" />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Portal Settings */}
+        <div className="bg-white border border-neutral-200 rounded-2xl p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-neutral-900">Guest Portal</h3>
+            <button onClick={() => {
+              setLocalSettings(prev => ({ ...prev, portalSettings: { ...prev.portalSettings, enabled: !prev.portalSettings?.enabled } }));
+              setDirty(true);
+            }} className={`relative w-9 h-5 rounded-full transition-colors ${localSettings.portalSettings?.enabled ? 'bg-emerald-500' : 'bg-neutral-300'}`}>
+              <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${localSettings.portalSettings?.enabled ? 'left-[18px]' : 'left-0.5'}`} />
+            </button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className={labelClass}>Portal Slug</label>
+              <input value={localSettings.portalSettings?.portalSlug || ''} onChange={e => { setLocalSettings(prev => ({ ...prev, portalSettings: { ...prev.portalSettings, portalSlug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') } })); setDirty(true); }} placeholder="your-hotel" className={inputClass} />
+              <p className="text-[10px] text-neutral-400 mt-1">URL: portal.rumo.be/<strong>{localSettings.portalSettings?.portalSlug || 'your-hotel'}</strong></p>
+            </div>
+            <div>
+              <label className={labelClass}>Custom Domain (optional)</label>
+              <input value={localSettings.portalSettings?.portalDomain || ''} onChange={e => { setLocalSettings(prev => ({ ...prev, portalSettings: { ...prev.portalSettings, portalDomain: e.target.value } })); setDirty(true); }} placeholder="portal.yourhotel.com" className={inputClass} />
+              <p className="text-[10px] text-neutral-400 mt-1">Set up a CNAME record pointing to portal.rumo.be</p>
+            </div>
+          </div>
+          {localSettings.portalSettings?.enabled && (
+            <div className="mt-3 p-3 bg-neutral-50 rounded-lg">
+              <div className="text-xs text-neutral-500 mb-1">Current portal URL (dev):</div>
+              <a href={`#/go`} className="text-xs font-mono text-blue-600 hover:underline" target="_blank" rel="noopener">
+                {window.location.origin}{window.location.pathname}#/go
+              </a>
+            </div>
+          )}
         </div>
       </>)}
     </div>

@@ -36,6 +36,21 @@ let hotelSettings = (() => {
       nextNumber: 1,
     },
     paymentMethods: ['Cash', 'Card (PIN)', 'Maestro', 'Mastercard', 'Visa', 'iDEAL', 'Bank Transfer'],
+    emailBranding: {
+      logoUrl: '',
+      primaryColor: '#171717',
+      accentColor: '#f59e0b',
+      backgroundColor: '#ffffff',
+      footerText: '',
+      socialLinks: { facebook: '', instagram: '', website: '' },
+      replyToEmail: '',
+      senderName: '',
+    },
+    portalSettings: {
+      portalDomain: '',
+      portalSlug: '',
+      enabled: true,
+    },
   };
 })();
 const saveHotelSettings = () => localStorage.setItem('hotelSettings', JSON.stringify(hotelSettings));
@@ -58,11 +73,9 @@ if (!hotelSettings.paymentMethods || !hotelSettings.paymentMethods.length) {
   saveHotelSettings();
 } else {
   // Ensure Cash is first and Bank Transfer is last
-  let pm = hotelSettings.paymentMethods.filter(m => m !== 'Cash' && m !== 'Bank Transfer');
-  if (!hotelSettings.paymentMethods.includes('Cash')) pm = ['Cash', ...pm];
-  else pm.unshift('Cash');
-  if (!hotelSettings.paymentMethods.includes('Bank Transfer')) pm.push('Bank Transfer');
-  else pm.push('Bank Transfer');
+  const pm = hotelSettings.paymentMethods.filter(m => m !== 'Cash' && m !== 'Bank Transfer');
+  pm.unshift('Cash');
+  pm.push('Bank Transfer');
   if (JSON.stringify(pm) !== JSON.stringify(hotelSettings.paymentMethods)) {
     hotelSettings.paymentMethods = pm;
     saveHotelSettings();
@@ -83,6 +96,17 @@ if (hotelSettings.hotelAddress && !hotelSettings.hotelStreet) {
   saveHotelSettings();
 }
 const getHotelAddress = () => [hotelSettings.hotelStreet, [hotelSettings.hotelZip, hotelSettings.hotelCity].filter(Boolean).join(' '), hotelSettings.hotelCountry].filter(Boolean).join(', ');
+
+// Ensure emailBranding exists for existing localStorage data
+if (!hotelSettings.emailBranding) {
+  hotelSettings.emailBranding = { logoUrl: '', primaryColor: '#171717', accentColor: '#f59e0b', backgroundColor: '#ffffff', footerText: '', socialLinks: { facebook: '', instagram: '', website: '' }, replyToEmail: '', senderName: '' };
+  saveHotelSettings();
+}
+// Ensure portalSettings exists for existing localStorage data
+if (!hotelSettings.portalSettings) {
+  hotelSettings.portalSettings = { portalDomain: '', portalSlug: '', enabled: true };
+  saveHotelSettings();
+}
 
 // Ensure autoClose exists for existing localStorage data
 if (!hotelSettings.autoClose) {
@@ -477,21 +501,39 @@ let hotelUsers = (() => {
     if (stored) { const parsed = JSON.parse(stored); if (parsed.length > 0) return parsed; }
   } catch (e) {}
   return [
-    { id: 'usr-0', name: 'Jeffrey',          pin: '5698', role: 'admin',        department: 'Management', color: '#0f172a', active: true, createdAt: Date.now(), updatedAt: Date.now() },
-    { id: 'usr-1', name: 'Peter Claes',      pin: '0000', role: 'admin',        department: 'Management', color: '#7c3aed', active: true, createdAt: Date.now(), updatedAt: Date.now() },
-    { id: 'usr-2', name: 'Sophie Laurent',   pin: '1234', role: 'receptionist', department: 'Reception',  color: '#2563eb', active: true, createdAt: Date.now(), updatedAt: Date.now() },
-    { id: 'usr-3', name: 'Lukas Vermeer',    pin: '5678', role: 'housekeeping', department: 'Housekeeping', color: '#059669', active: true, createdAt: Date.now(), updatedAt: Date.now() },
-    { id: 'usr-4', name: 'Emma De Smet',     pin: '9012', role: 'fb',           department: 'F&B',        color: '#d97706', active: true, createdAt: Date.now(), updatedAt: Date.now() },
-    { id: 'usr-5', name: 'Nina Peeters',     pin: '3456', role: 'receptionist', department: 'Reception',  color: '#2563eb', active: true, createdAt: Date.now(), updatedAt: Date.now() },
+    { id: 'usr-0', name: 'Jeffrey',          pin: '9000', role: 'admin',        department: 'Management', color: '#0f172a', active: true, createdAt: Date.now(), updatedAt: Date.now() },
+    { id: 'usr-1', name: 'Peter Claes',      pin: '9000', role: 'admin',        department: 'Management', color: '#7c3aed', active: true, createdAt: Date.now(), updatedAt: Date.now() },
+    { id: 'usr-2', name: 'Sophie Laurent',   pin: '9000', role: 'receptionist', department: 'Reception',  color: '#2563eb', active: true, createdAt: Date.now(), updatedAt: Date.now() },
+    { id: 'usr-3', name: 'Lukas Vermeer',    pin: '9000', role: 'housekeeping', department: 'Housekeeping', color: '#059669', active: true, createdAt: Date.now(), updatedAt: Date.now() },
+    { id: 'usr-4', name: 'Emma De Smet',     pin: '9000', role: 'fb',           department: 'F&B',        color: '#d97706', active: true, createdAt: Date.now(), updatedAt: Date.now() },
+    { id: 'usr-5', name: 'Nina Peeters',     pin: '9000', role: 'receptionist', department: 'Reception',  color: '#2563eb', active: true, createdAt: Date.now(), updatedAt: Date.now() },
   ];
 })();
 const saveHotelUsers = () => { localStorage.setItem('hotelUsers', JSON.stringify(hotelUsers)); };
 
 // Ensure Jeffrey admin exists (migration for existing localStorage data)
 if (!hotelUsers.find(u => u.id === 'usr-0')) {
-  hotelUsers.unshift({ id: 'usr-0', name: 'Jeffrey', pin: '5698', role: 'admin', department: 'Management', color: '#0f172a', active: true, createdAt: Date.now(), updatedAt: Date.now() });
+  hotelUsers.unshift({ id: 'usr-0', name: 'Jeffrey', pin: '9000', role: 'admin', department: 'Management', color: '#0f172a', active: true, createdAt: Date.now(), updatedAt: Date.now() });
   saveHotelUsers();
 }
+
+// ── Email Templates — persisted in localStorage ─────────────────────────────
+let emailTemplates = (() => {
+  try {
+    const stored = localStorage.getItem('hotelEmailTemplates');
+    if (stored) return JSON.parse(stored);
+  } catch (e) {}
+  return [
+    { id: 'tpl-confirmation', name: 'Booking Confirmation', type: 'confirmation', subject: 'Booking Confirmation — {{hotel_name}}', bodyHtml: '', bodyPlaintext: 'BOOKING CONFIRMATION\n======================================\n\nDear {{booker_firstname}},\n\nYour reservation at {{hotel_name}} is confirmed.\n\nBooking Ref: {{booking_ref}}\nCheck-in: {{checkin_date}}\nCheck-out: {{checkout_date}}\nRoom: {{room_type}} ({{room_number}})\nNights: {{num_nights}}\n\nTotal: {{currency}} {{total_price}}\n\nACCESS YOUR GUEST PORTAL:\nGo to {{portal_url}} and enter code: {{portal_code}}\n\n{{footer_text}}\n', isCustomHtml: false, active: true, autoSend: false, triggerEvent: 'booking_created', triggerOffset: 0, updatedAt: Date.now() },
+    { id: 'tpl-precheckin', name: 'Pre Check-in', type: 'pre-checkin', subject: 'Prepare your stay — {{hotel_name}}', bodyHtml: '', bodyPlaintext: 'PREPARE YOUR STAY AT {{hotel_name}}\n======================================\n\nDear {{booker_firstname}},\n\nYour check-in is on {{checkin_date}}.\n\nACCESS YOUR GUEST PORTAL:\nGo to {{portal_url}} and enter code: {{portal_code}}\n\nWe look forward to welcoming you!\n\n{{footer_text}}\n', isCustomHtml: false, active: true, autoSend: true, triggerEvent: 'pre_checkin', triggerOffset: -48, updatedAt: Date.now() },
+    { id: 'tpl-invoice', name: 'Invoice', type: 'invoice', subject: 'Invoice {{invoice_number}} — {{hotel_name}}', bodyHtml: '', bodyPlaintext: 'INVOICE {{invoice_number}}\n======================================\n\nDate: {{invoice_date}}\nBill to: {{company_name}}\n\n{{invoice_lines}}\n\nSubtotal: {{currency}} {{invoice_subtotal}}\nVAT: {{currency}} {{invoice_vat}}\nTotal: {{currency}} {{invoice_total}}\n\n{{footer_text}}\n', isCustomHtml: false, active: true, autoSend: false, triggerEvent: 'manual', triggerOffset: 0, updatedAt: Date.now() },
+    { id: 'tpl-checkout', name: 'Post Check-out', type: 'checkout', subject: 'Thank you for your stay — {{hotel_name}}', bodyHtml: '', bodyPlaintext: 'THANK YOU FOR YOUR STAY\n======================================\n\nDear {{booker_firstname}},\n\nThank you for staying at {{hotel_name}}.\n\nCheck-in: {{checkin_date}}\nCheck-out: {{checkout_date}}\nRoom: {{room_type}}\n\nWe hope to welcome you again soon!\n\n{{footer_text}}\n', isCustomHtml: false, active: true, autoSend: false, triggerEvent: 'checkout', triggerOffset: 0, updatedAt: Date.now() },
+  ];
+})();
+const saveEmailTemplates = () => {
+  localStorage.setItem('hotelEmailTemplates', JSON.stringify(emailTemplates));
+  syncConfig('emailTemplates', emailTemplates);
+};
 
 // Backward-compatibility aliases (companyRegistry / guestRegistry used elsewhere in codebase)
 const companyRegistry = companyProfiles;

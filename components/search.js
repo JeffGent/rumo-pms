@@ -4,14 +4,23 @@ const SearchModal = (props) => {
   if (!searchOpen) return null;
 
     const filteredResults = searchQuery.length > 0
-      ? reservations.filter(r =>
-          r.guest && (
-            r.guest.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            r.room.includes(searchQuery) ||
-            r.bookingRef.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            (r.otaRef && r.otaRef.toLowerCase().includes(searchQuery.toLowerCase()))
-          )
-        ).slice(0, 8)
+      ? reservations.filter(r => {
+          const q = searchQuery.toLowerCase();
+          // Search guest name (legacy field + booker)
+          if (r.guest && r.guest.toLowerCase().includes(q)) return true;
+          if (r.booker && (`${r.booker.firstName} ${r.booker.lastName}`).toLowerCase().includes(q)) return true;
+          // Search all room numbers (multi-room support)
+          if (r.rooms && r.rooms.some(rm => String(rm.roomNumber).includes(searchQuery))) return true;
+          if (r.room && r.room.includes(searchQuery)) return true;
+          // Search room guests
+          if (r.rooms && r.rooms.some(rm => (rm.guests || []).some(g =>
+            (`${g.firstName} ${g.lastName}`).toLowerCase().includes(q)
+          ))) return true;
+          // Search booking refs
+          if (r.bookingRef && r.bookingRef.toLowerCase().includes(q)) return true;
+          if (r.otaRef && r.otaRef.toLowerCase().includes(q)) return true;
+          return false;
+        }).slice(0, 8)
       : [];
 
     const modLabel = /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌃' : 'Alt+';

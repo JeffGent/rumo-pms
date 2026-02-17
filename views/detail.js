@@ -156,7 +156,9 @@ const ReservationDetailView = (props) => {
     { id: 'overview', label: 'Overview' },
     { id: 'room', label: 'Rooms & Guests' },
     { id: 'billing', label: 'Billing' },
+    { id: 'email', label: 'Messages' },
   ];
+  const [emailPreviewTemplate, setEmailPreviewTemplate] = useState(null);
 
   // Helper to update editingReservation fields (optional logMsg adds activity log entry)
   const updateEd = (path, value, logMsg) => {
@@ -3524,6 +3526,178 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + confirmed
             </div>
             );
           })()}
+
+          {/* ===== TAB 4: MESSAGES ===== */}
+          {reservationTab === 'email' && (
+            <div className="space-y-4">
+              {/* Portal Code Section */}
+              <div className="bg-white border border-neutral-200 rounded-2xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-xs font-medium text-neutral-500 uppercase tracking-wider">Guest Portal</div>
+                </div>
+                {ed.rooms.map((room, ri) => {
+                  const code = room.guestPortalCode;
+                  const portalUrl = code ? getPortalUrl(code) : null;
+                  return (
+                    <div key={ri} className="flex items-center justify-between py-2 border-b border-neutral-50 last:border-0">
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-neutral-500">Room {room.roomNumber}</span>
+                        {code ? (
+                          <span className="font-mono text-sm font-medium text-neutral-900 bg-neutral-50 px-2 py-0.5 rounded-lg">{code}</span>
+                        ) : (
+                          <span className="text-xs text-neutral-400">No code</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        {code && portalUrl && (
+                          <button onClick={() => { navigator.clipboard.writeText(portalUrl); setToastMessage('Portal link copied'); }}
+                            title="Copy portal link"
+                            className="p-1.5 hover:bg-neutral-100 rounded-lg transition-colors text-neutral-400 hover:text-neutral-700">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                          </button>
+                        )}
+                        {code && (
+                          <button onClick={() => { navigator.clipboard.writeText(code); setToastMessage('Code copied'); }}
+                            title="Copy code"
+                            className="p-1.5 hover:bg-neutral-100 rounded-lg transition-colors text-neutral-400 hover:text-neutral-700">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                          </button>
+                        )}
+                        <button onClick={() => {
+                          const next = JSON.parse(JSON.stringify(ed));
+                          const newCode = generatePortalCode(next, ri);
+                          next.rooms[ri].guestPortalCode = newCode;
+                          const now = new Date();
+                          next.rooms[ri].portalCodeValidFrom = now.toISOString();
+                          const co = next.rooms[ri].checkout ? new Date(next.rooms[ri].checkout) : null;
+                          if (co) { co.setDate(co.getDate() + 3); next.rooms[ri].portalCodeValidUntil = co.toISOString(); }
+                          next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Portal code ${code ? 'regenerated' : 'generated'}: ${newCode} (Room ${room.roomNumber})`, user: currentUser?.name || 'System' });
+                          setEditingReservation(next);
+                          syncPortalCode(newCode, ed.bookingRef, ri, next.rooms[ri].portalCodeValidFrom, next.rooms[ri].portalCodeValidUntil);
+                          setToastMessage(`Portal code ${code ? 'regenerated' : 'generated'}: ${newCode}`);
+                        }}
+                          className="px-2.5 py-1 text-xs font-medium bg-neutral-100 text-neutral-600 rounded-lg hover:bg-neutral-200 transition-colors">
+                          {code ? 'Regenerate' : 'Generate'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Send Email Section */}
+              <div className="bg-white border border-neutral-200 rounded-2xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-xs font-medium text-neutral-500 uppercase tracking-wider">Send Email</div>
+                </div>
+                <div className="space-y-2">
+                  {emailTemplates.filter(t => t.active).map(template => {
+                    const autoSendConfig = hotelSettings.emailAutoSend?.[template.id];
+                    return (
+                      <div key={template.id} className="flex items-center justify-between p-3 bg-neutral-50 rounded-xl hover:bg-neutral-100 transition-colors">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-white border border-neutral-200 flex items-center justify-center">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-neutral-400">
+                              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
+                            </svg>
+                          </div>
+                          <div>
+                            <div className="text-xs font-medium text-neutral-900">{template.name}</div>
+                            {autoSendConfig?.enabled && (
+                              <div className="text-[10px] text-emerald-600 flex items-center gap-1 mt-0.5">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-2.5 h-2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                Auto-send on {autoSendConfig.trigger}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <button onClick={() => {
+                            // Auto-generate portal code if template uses portal variables and no code exists
+                            const tplBody = (template.bodyHtml || '') + (template.bodyPlaintext || '') + (template.subject || '');
+                            const needsPortal = /\{\{portal_code\}\}|\{\{portal_url\}\}|\{\{portal_link\}\}/.test(tplBody);
+                            if (needsPortal && ed.rooms?.[0] && !ed.rooms[0].guestPortalCode) {
+                              const next = JSON.parse(JSON.stringify(ed));
+                              for (let ri = 0; ri < next.rooms.length; ri++) {
+                                if (!next.rooms[ri].guestPortalCode) {
+                                  const newCode = generatePortalCode(next, ri);
+                                  next.rooms[ri].guestPortalCode = newCode;
+                                  next.activityLog.push({ id: Date.now() + ri, timestamp: Date.now(), action: `Portal code auto-generated: ${newCode} (Room ${next.rooms[ri].roomNumber})`, user: currentUser?.name || 'System' });
+                                  syncPortalCode(newCode, next.bookingRef, ri, next.rooms[ri].portalCodeValidFrom, next.rooms[ri].portalCodeValidUntil);
+                                }
+                              }
+                              setEditingReservation(next);
+                            }
+                            setEmailPreviewTemplate(template.id);
+                          }}
+                            className="px-3 py-1.5 text-xs font-medium bg-neutral-900 text-white rounded-lg hover:bg-neutral-800 transition-colors">
+                            Preview & Send
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {emailTemplates.filter(t => t.active).length === 0 && (
+                    <div className="text-xs text-neutral-400 text-center py-4">No active email templates. Configure templates in Settings.</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Email Log */}
+              <div className="bg-white border border-neutral-200 rounded-2xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                    Email History {(ed.emailLog || []).length > 0 && <span className="text-neutral-300 ml-1">({ed.emailLog.length})</span>}
+                  </div>
+                </div>
+                {(ed.emailLog || []).length > 0 ? (
+                  <div className="space-y-2">
+                    {[...(ed.emailLog || [])].sort((a, b) => new Date(b.sentAt) - new Date(a.sentAt)).map(log => (
+                      <div key={log.id} className="flex items-center justify-between p-3 bg-neutral-50 rounded-xl">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${log.status === 'sent' ? 'bg-emerald-50' : 'bg-red-50'}`}>
+                            {log.status === 'sent' ? (
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-emerald-600"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                            ) : (
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-red-500"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                            )}
+                          </div>
+                          <div>
+                            <div className="text-xs font-medium text-neutral-900">{log.templateName}</div>
+                            <div className="text-[10px] text-neutral-400">
+                              {new Date(log.sentAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                              {' · '}{log.sentTo}
+                              {log.sentBy && <> · by {log.sentBy}</>}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-xs text-neutral-400 text-center py-4">No emails sent yet</div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Email Preview Modal */}
+          {emailPreviewTemplate && (
+            <EmailPreviewModal
+              templateId={emailPreviewTemplate}
+              reservation={ed}
+              extraData={{}}
+              onClose={() => setEmailPreviewTemplate(null)}
+              onSend={(logEntry) => {
+                const next = JSON.parse(JSON.stringify(ed));
+                if (!next.emailLog) next.emailLog = [];
+                next.emailLog.push(logEntry);
+                next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Email sent: ${logEntry.templateName} to ${logEntry.sentTo}`, user: currentUser?.name || 'System' });
+                setEditingReservation(next);
+                setToastMessage(`Email sent to ${logEntry.sentTo}`);
+              }}
+            />
+          )}
 
           </>)}
         </div>

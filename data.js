@@ -356,7 +356,7 @@ const generateReservations = () => {
 };
 
 // Data version — increment to force regeneration when model changes
-const DATA_VERSION = 32;
+const DATA_VERSION = 33;
 
 // Laad of genereer reserveringen met localStorage persistentie
 const getReservations = () => {
@@ -365,7 +365,23 @@ const getReservations = () => {
     const stored = localStorage.getItem('hotelReservations');
     if (stored && storedVersion === String(DATA_VERSION)) {
       const parsed = JSON.parse(stored);
-      return parsed.map(r => ({
+      // Validate and sanitize on load — skip corrupt entries instead of crashing
+      return parsed.filter(r => {
+        if (!r || !r.id || !r.bookingRef) {
+          console.warn('[Data] Skipping corrupt reservation (missing id/bookingRef):', r);
+          return false;
+        }
+        if (!r.rooms || !Array.isArray(r.rooms) || r.rooms.length === 0) {
+          console.warn(`[Data] Skipping ${r.bookingRef}: missing/empty rooms array`);
+          return false;
+        }
+        // Ensure required arrays exist
+        if (!r.activityLog) r.activityLog = [];
+        if (!r.extras) r.extras = [];
+        if (!r.payments) r.payments = [];
+        if (!r.invoices) r.invoices = [];
+        return true;
+      }).map(r => ({
         ...r,
         checkin: new Date(r.checkin),
         checkout: new Date(r.checkout),
