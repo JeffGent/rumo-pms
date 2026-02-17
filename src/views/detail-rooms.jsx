@@ -2,13 +2,13 @@ import React, { useState } from 'react';
 import globals from '../globals.js';
 import { noTypeDateKey, deriveReservationDates, buildFlatRoomEntries, formatDate } from '../utils.js';
 import { Icons } from '../icons.jsx';
-import { getAllRooms, getRoomTypeName, SUPPORTED_LANGUAGES, detectLanguageFromPhone, lsKey, getExtraPrice, getHotelAddress, saveGuestProfiles } from '../config.js';
+import { getAllRooms, getRoomType, getRoomTypeName, SUPPORTED_LANGUAGES, detectLanguageFromPhone, lsKey, getExtraPrice, getHotelAddress, saveGuestProfiles } from '../config.js';
 
 // -- Detail: Rooms & Guests Tab --
 const DetailRoomsTab = ({ dp }) => {
   const {
     ed, setEditingReservation, reservation, updateEd, updateStatus, updateRoomStatus,
-    setToastMessage, onFocusTrack, onBlurLog, addToActivityLog, focusValRef,
+    setToastMessage, setWarningToast, onFocusTrack, onBlurLog, addToActivityLog, focusValRef,
     roomGridMode, setRoomGridMode, activeGuestTab, setActiveGuestTab,
     expandedRooms, setExpandedRooms, guestSearchActive, setGuestSearchActive,
     changeRoomTarget, setChangeRoomTarget, setPendingDateChange, edCheckin, edCheckout,
@@ -499,7 +499,6 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + confirmed
                     {/* Collapsed: summary line */}
                     {!isExpanded && (
                       <div className="flex items-center gap-1.5 pb-2.5">
-                        {(housekeepingStatus?.[reservation.id] || room.housekeeping) !== 'clean' && <div className="w-2 h-2 rounded-full flex-shrink-0 bg-amber-500" title="Housekeeping pending" />}
                         <span className={`text-xs font-semibold ${
                           ({ confirmed: 'text-blue-600', option: 'text-pink-600', 'checked-in': 'text-emerald-600', 'checked-out': 'text-neutral-500', 'no-show': 'text-red-600', cancelled: 'text-red-500', blocked: 'text-slate-600' })[room.status || 'confirmed'] || 'text-blue-600'
                         }`}>{({ confirmed: 'Confirmed', option: 'Option', 'checked-in': 'Checked-in', 'checked-out': 'Checked-out', 'no-show': 'No-show', cancelled: 'Cancelled', blocked: 'Blocked' })[room.status || 'confirmed']}</span>
@@ -957,16 +956,16 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + confirmed
                           <div className="relative">
                             <input value={newExtra.name}
                               onChange={(e) => { setNewExtra(prev => ({ ...prev, name: e.target.value })); setExtraDropdownOpen(true); }}
-                              onFocus={() => setExtraDropdownOpen(true)}
+                              onFocus={() => { if (newExtra.name.length > 0) setExtraDropdownOpen(true); }}
                               onBlur={() => setTimeout(() => setExtraDropdownOpen(false), 200)}
                               placeholder="+ Add extra..."
                               className="w-full px-2 py-1 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent" />
                             {extraDropdownOpen && (() => {
                               const q = newExtra.name.toLowerCase();
                               const ci = ed.rooms?.[0] ? new Date(ed.rooms[0].checkin) : new Date(ed.checkin);
-                              const matches = globals.extrasCatalog.filter(c => !q || c.name.toLowerCase().includes(q));
+                              if (!q) return null;
+                              const matches = globals.extrasCatalog.filter(c => c.name.toLowerCase().includes(q));
                               const exactMatch = globals.extrasCatalog.some(c => c.name.toLowerCase() === q);
-                              if (matches.length === 0 && !q) return null;
                               return (
                                 <div className="absolute z-30 left-0 right-0 top-full mt-1 bg-white border border-neutral-200 rounded-xl shadow-xl overflow-hidden" style={{ maxHeight: 240, overflowY: 'auto' }}>
                                   {matches.map(c => {
@@ -1122,15 +1121,36 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + confirmed
                         <span className="text-xs text-neutral-400">Select valid dates</span>
                       ) : availableRooms.length === 0 ? (
                         <span className="text-xs text-neutral-400">No rooms available for these dates</span>
-                      ) : availableRooms.map(rm => (
-                        <button key={rm} onClick={() => {
+                      ) : availableRooms.map(rm => {
+                        const rt = getRoomType(rm);
+                        const rtName = getRoomTypeName(rm);
+                        // Use same rate plan as first room, or default
+                        const existingRatePlanId = ed.rooms?.[0]?.ratePlanId || globals.ratePlans[0]?.id;
+                        const rp = globals.ratePlans.find(p => p.id === existingRatePlanId) || globals.ratePlans[0];
+                        const nightlyRate = Math.round((rt?.defaultRate || 95) + (rp?.priceModifier || 0));
+                        return (
+                        <div key={rm} className="relative group">
+                        <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity duration-100 delay-[600ms] z-30">
+                          <div className="bg-amber-50 border border-amber-300 rounded-2xl shadow-2xl px-4 py-2.5 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-amber-500 flex-shrink-0"><path d="M3 21h18M3 7v1a3 3 0 0 0 6 0V7m0 1a3 3 0 0 0 6 0V7m0 1a3 3 0 0 0 6 0V7H3l2-4h14l2 4M5 21V10.87M19 21V10.87"/></svg>
+                              <div>
+                                <div className="text-xs font-semibold text-amber-900">{rtName}</div>
+                                <div className="text-[11px] text-amber-700 mt-0.5">{rp?.name || 'Room Only'} · <span className="font-bold">€{nightlyRate}</span>/night</div>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="absolute left-1/2 -translate-x-1/2 -bottom-1 w-2 h-2 bg-amber-50 border-r border-b border-amber-300 rotate-45" />
+                        </div>
+                        <button onClick={() => {
                           const next = JSON.parse(JSON.stringify(ed));
                           const nights = [];
                           for (let d = new Date(addCi); d < addCo; d.setDate(d.getDate() + 1)) {
-                            nights.push({ date: d.toISOString().slice(0, 10), amount: 0 });
+                            nights.push({ date: d.toISOString().slice(0, 10), amount: nightlyRate });
                           }
                           next.rooms.push({
-                            roomNumber: rm, roomType: 'Standard',
+                            roomNumber: rm, roomType: rtName,
+                            ratePlanId: existingRatePlanId,
                             status: 'confirmed',
                             guests: [
                               { firstName: ed.booker.firstName || '', lastName: ed.booker.lastName || '', email: ed.booker.email || '', phone: ed.booker.phone || '', nationality: 'NL', idType: '', idNumber: '' },
@@ -1138,20 +1158,22 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + confirmed
                             ],
                             checkin: addCi.toISOString(),
                             checkout: addCo.toISOString(),
-                            priceType: 'fixed', fixedPrice: 0,
+                            priceType: 'per-night', fixedPrice: nightlyRate,
                             nightPrices: nights,
                             housekeeping: 'clean', housekeepingNote: '', optionExpiry: null,
                             roomLocked: false, roomLockedReason: ''
                           });
                           next.activityLog.push({ id: Date.now(), timestamp: Date.now(), action: `Room ${rm} added (${addRoomDates.checkin} \u2192 ${addRoomDates.checkout})`, user: globals.currentUser?.name || 'System' });
                           setEditingReservation(next);
-                          setToastMessage(`Room ${rm} added`);
+                          setToastMessage(`Room ${rm} added (${rtName} · ${rp?.name || 'Room Only'} · €${nightlyRate}/night)`);
                           setTimeout(() => { addRoomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, 50);
                         }}
                           className="px-3 py-1.5 text-xs font-medium border border-dashed border-neutral-300 rounded-lg hover:border-neutral-900 hover:bg-neutral-50 hover:text-neutral-900 text-neutral-400 transition-all">
                           + {rm}
                         </button>
-                      ))}
+                        </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );

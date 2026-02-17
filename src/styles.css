@@ -57,7 +57,11 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   flex-direction: column;
   padding: 1.5rem 0;
   transition: padding 0.4s ease;
-  position: relative;
+  position: sticky;
+  top: 73px;
+  height: calc(100vh - 73px);
+  overflow: visible;
+  overflow-y: clip;
 }
 .cal-sidebar.collapsed {
   padding: 1.5rem 0.5rem;

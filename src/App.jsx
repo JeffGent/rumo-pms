@@ -673,7 +673,7 @@ const ModernHotelPMS = () => {
     messagesOpen, setMessagesOpen, messages, setMessages,
     activeConversation, setActiveConversation, showCompose, setShowCompose,
     editingReservation, setEditingReservation, showActionMenu, setShowActionMenu,
-    changeRoomTarget, setChangeRoomTarget, toastMessage, setToastMessage,
+    changeRoomTarget, setChangeRoomTarget, toastMessage, setToastMessage, setWarningToast,
     housekeepingStatus, setHousekeepingStatus, totalRooms,
     messageInputRef, messagesEndRef, searchInputRef, focusValRef, addRoomRef, dragPaymentRef,
     showCheckoutWarning, toggleCheckInOut,
