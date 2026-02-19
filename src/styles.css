@@ -295,7 +295,8 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 
 /* ─── Calendar Grid ──────────────────────────────────────────────────── */
 .cal-grid-wrap {
-  flex: 0 1 auto;
+  flex: 1 1 0;
+  min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
   background: #ffffff;

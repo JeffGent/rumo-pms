@@ -443,7 +443,7 @@ const CalendarView = (props) => {
           </div>
           <div className="cal-nav-footer">{!sidebarCollapsed && (<>Rumo &copy; <span className={`inline-block w-1.5 h-1.5 rounded-full align-middle ${cloudStatus === 'idle' ? 'bg-emerald-400' : cloudStatus === 'syncing' ? 'bg-amber-400 animate-pulse' : cloudStatus === 'error' ? 'bg-red-400' : 'bg-neutral-300'}`} title={cloudStatus === 'idle' ? 'Cloud synced' : cloudStatus === 'syncing' ? 'Syncing...' : cloudStatus === 'error' ? 'Sync error' : 'Offline'} /><br/>All Rights Reserved</>)}</div>
         </aside>
-        <div className="p-4 md:p-8 overflow-hidden flex flex-col">
+        <div className="p-4 md:p-8 overflow-hidden flex flex-col" style={{height: 'calc(100vh - 73px)'}}>
         <div className="max-w-7xl mx-auto w-full flex flex-col flex-1 min-h-0">
         <div className="cal-title mb-4">
             <h2>Reservations</h2>
