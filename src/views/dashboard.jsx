@@ -243,7 +243,8 @@ const DashboardView = (props) => {
     });
   };
 
-  const roomsForDate = getReservationsForDate(selectedDate, activeFilter === 'departing');
+  // Always compute stats from arrival-preferred view (stable regardless of active filter)
+  const roomsForDate = getReservationsForDate(selectedDate);
 
   const occupiedRooms = roomsForDate.filter(r => r.status !== 'available');
   const revenueRooms = occupiedRooms.filter(r => r.visualStatus !== 'blocked');
@@ -270,20 +271,27 @@ const DashboardView = (props) => {
     return roomStatus !== 'checked-out';
   }).length;
 
-  const filteredRooms = roomsForDate.filter(room => {
-    if (activeFilter === 'all') return true;
-    if (activeFilter === 'available') return room.status === 'available';
-    if (activeFilter === 'in-house') return room.status === 'in-house';
-    if (activeFilter === 'arriving') return room.status === 'arriving' && room.visualStatus !== 'blocked' && room.reservationStatus !== 'cancelled' && room.reservationStatus !== 'no-show';
-    if (activeFilter === 'departing') return room.status === 'departing' && room.visualStatus !== 'blocked' && room.reservationStatus !== 'cancelled' && room.reservationStatus !== 'no-show';
-    if (activeFilter === 'blocked') return room.visualStatus === 'blocked';
-    return true;
-  });
+  // Departure-preferred view: for Leaving filter + billing alerts (same-day turnover shows departure)
+  const departingView = getReservationsForDate(selectedDate, true);
+
+  const filteredRooms = (() => {
+    if (activeFilter === 'departing') {
+      return departingView.filter(room => room.status === 'departing' && room.visualStatus !== 'blocked' && room.reservationStatus !== 'cancelled' && room.reservationStatus !== 'no-show');
+    }
+    return roomsForDate.filter(room => {
+      if (activeFilter === 'all') return true;
+      if (activeFilter === 'available') return room.status === 'available';
+      if (activeFilter === 'in-house') return room.status === 'in-house';
+      if (activeFilter === 'arriving') return room.status === 'arriving' && room.visualStatus !== 'blocked' && room.reservationStatus !== 'cancelled' && room.reservationStatus !== 'no-show';
+      if (activeFilter === 'blocked') return room.visualStatus === 'blocked';
+      return true;
+    });
+  })();
 
   const blockedCount = roomsForDate.filter(r => r.visualStatus === 'blocked').length;
 
   // Billing alerts: departing rooms with billing issues
-  const billingAlertRooms = roomsForDate.filter(r => {
+  const billingAlertRooms = departingView.filter(r => {
     if (r.status !== 'departing' || !r.guest || r.visualStatus === 'blocked') return false;
     return ReservationService.validateCheckout(r) !== null;
   });
