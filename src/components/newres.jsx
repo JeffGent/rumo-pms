@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import globals from '../globals.js';
 import { getAllRooms, getRoomTypeName, getNextBookingRef } from '../config.js';
 import { buildFlatRoomEntries, noTypeDateKey, toDateStr } from '../utils.js';
@@ -11,7 +11,7 @@ const NewReservationModal = (props) => {
     const [newResShowSuggestions, setNewResShowSuggestions] = useState(false);
     const [newResCheckin, setNewResCheckin] = useState('');
     const [newResCheckout, setNewResCheckout] = useState('');
-    const [newResInited, setNewResInited] = useState(false);
+    const lastOpenRef = useRef(null);
     const [newResCompanyMode, setNewResCompanyMode] = useState(false);
     const [newResCompanySearch, setNewResCompanySearch] = useState('');
     const [newResSelectedCompany, setNewResSelectedCompany] = useState(null);
@@ -25,11 +25,15 @@ const NewReservationModal = (props) => {
     const preSelectedCheckin = newReservationOpen?.checkin || '';
     const preSelectedCheckout = newReservationOpen?.checkout || '';
 
-    // Init dates from pre-selection (once)
-    if (!newResInited) {
-      if (preSelectedCheckin) setNewResCheckin(preSelectedCheckin);
-      if (preSelectedCheckout) setNewResCheckout(preSelectedCheckout);
-      setNewResInited(true);
+    // Re-init form when newReservationOpen changes (new calendar selection)
+    if (lastOpenRef.current !== newReservationOpen) {
+      lastOpenRef.current = newReservationOpen;
+      setNewResCheckin(preSelectedCheckin);
+      setNewResCheckout(preSelectedCheckout);
+      setNewResGuestName('');
+      setNewResCompanyMode(false);
+      setNewResSelectedCompany(null);
+      setNewResCompanySearch('');
     }
 
     const allRoomNumbers = getAllRooms();
