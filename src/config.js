@@ -1,4 +1,5 @@
 import globals from './globals.js';
+import { toDateStr } from './utils.js';
 
 // ── Multi-Tenant: Hotel ID ──────────────────────────────────────────────────
 export const HOTEL_ID = (() => {
@@ -139,7 +140,7 @@ export const detectLanguageFromPhone = (phone) => {
 export const getEffectiveVatRate = (baseRate, date) => {
   const vr = globals.vatRates.find(v => v.rate === baseRate);
   if (!vr || !vr.schedule || vr.schedule.length === 0) return baseRate;
-  const d = date instanceof Date ? date.toISOString().slice(0, 10) : (typeof date === 'string' ? date.slice(0, 10) : null);
+  const d = date instanceof Date ? toDateStr(date) : (typeof date === 'string' ? date.slice(0, 10) : null);
   if (!d) return baseRate;
   let effective = vr.rate;
   [...vr.schedule].sort((a, b) => a.from.localeCompare(b.from)).forEach(s => {
@@ -165,7 +166,7 @@ export const getAllRooms = () => {
 // ── Extra price helper ──────────────────────────────────────────────────────
 export const getExtraPrice = (cat, date) => {
   if (!cat.priceSchedule || cat.priceSchedule.length === 0) return cat.defaultPrice;
-  const d = typeof date === 'string' ? date.slice(0, 10) : (date instanceof Date ? date.toISOString().slice(0, 10) : null);
+  const d = typeof date === 'string' ? date.slice(0, 10) : (date instanceof Date ? toDateStr(date) : null);
   if (!d) return cat.defaultPrice;
   const match = cat.priceSchedule.find(ps => ps.from <= d && ps.to >= d);
   return match ? match.price : cat.defaultPrice;

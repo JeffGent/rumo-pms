@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import globals from '../globals.js';
 import Icons from '../icons.jsx';
-import { formatDate } from '../utils.js';
+import { formatDate, toDateStr } from '../utils.js';
 import { canAccessPage, getExtraPrice } from '../config.js';
 import { saveReservationSingle } from '../supabase.js';
 import { resolveTemplateVariables } from '../components/emailengine.js';
@@ -261,7 +261,7 @@ const ReservationDetailView = (props) => {
         });
         const full = dayCount >= cat.dailyInventoryLimit;
         if (full) hasFullNight = true;
-        nightsInfo.push({ date: new Date(d).toISOString().slice(0, 10), label: new Date(d).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }), used: dayCount, limit: cat.dailyInventoryLimit, full });
+        nightsInfo.push({ date: toDateStr(new Date(d)), label: new Date(d).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }), used: dayCount, limit: cat.dailyInventoryLimit, full });
       }
       if (hasFullNight) {
         inventoryPendingRef.current = true;

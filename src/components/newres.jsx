@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import globals from '../globals.js';
 import { getAllRooms, getRoomTypeName, getNextBookingRef } from '../config.js';
-import { buildFlatRoomEntries, noTypeDateKey } from '../utils.js';
+import { buildFlatRoomEntries, noTypeDateKey, toDateStr } from '../utils.js';
 import { saveReservationSingle } from '../supabase.js';
 
 const NewReservationModal = (props) => {
@@ -253,7 +253,7 @@ const NewReservationModal = (props) => {
                     if (e.target.value && !newResCheckout) {
                       const next = new Date(e.target.value);
                       next.setDate(next.getDate() + 1);
-                      setNewResCheckout(next.toISOString().slice(0, 10));
+                      setNewResCheckout(toDateStr(next));
                     }
                   }}
                   className="w-full px-4 py-2.5 bg-neutral-50 border border-neutral-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all" />
@@ -316,7 +316,7 @@ const NewReservationModal = (props) => {
 
                 const nightPrices = [];
                 for (let d = new Date(checkin); d < checkout; d.setDate(d.getDate() + 1)) {
-                  nightPrices.push({ date: d.toISOString().slice(0, 10), amount: 0 });
+                  nightPrices.push({ date: toDateStr(d), amount: 0 });
                 }
 
                 const newId = Math.max(...globals.reservations.map(r => r.id), 0) + 1;

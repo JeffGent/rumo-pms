@@ -3,7 +3,7 @@ import globals from '../globals.js';
 import { addDays, buildFlatRoomEntries, getGuestName } from '../utils.js';
 import { getAllRooms, getRoomTypeName, canAccessPage, lsKey } from '../config.js';
 import Icons from '../icons.jsx';
-import { saveReservationSingle } from '../supabase.js';
+import { saveReservationSingle, syncReservation } from '../supabase.js';
 import { ReservationService } from '../services.js';
 
 const CalendarView = (props) => {
@@ -141,6 +141,7 @@ const CalendarView = (props) => {
 
     // Room drag & drop: move reservation to another room or swap two reservations
     const [dragActive, setDragActive] = useState(false);
+    const [dragVersion, setDragVersion] = useState(0); // Force re-render after room move
     const dragResRef = useRef(null);
     const dragRoomRef = useRef(null);
     const dropTargetRef = useRef(null);
@@ -175,6 +176,10 @@ const CalendarView = (props) => {
 
     const handleRowDrop = (e, targetRoom) => {
       e.preventDefault();
+      // Guard against duplicate execution (Vite HMR can fire old + new handler on same drop)
+      const now = Date.now();
+      if (now - (window._rumoLastDropTime || 0) < 500) return;
+      window._rumoLastDropTime = now;
       const resId = dragResRef.current;
       const dragFromRoom = dragRoomRef.current;
       if (resId == null) return;
@@ -193,8 +198,9 @@ const CalendarView = (props) => {
       }
 
       // Check if target room has a reservation overlapping the dragged reservation's dates
+      // Note: do NOT exclude same-id entries — multi-room reservations need intra-swap support
       const targetFlat = flatEntries.find(r => {
-        if (r.room !== targetRoom || r.id === resId || !r.checkin || !r.checkout) return false;
+        if (r.room !== targetRoom || !r.checkin || !r.checkout) return false;
         const st = r.reservationStatus || 'confirmed';
         if (st === 'cancelled' || st === 'no-show') return false;
         return r.checkin < draggedFlat.checkout && r.checkout > draggedFlat.checkin;
@@ -205,26 +211,68 @@ const CalendarView = (props) => {
       const draggedRoomIdx = draggedFlat._roomIndex != null ? draggedFlat._roomIndex : 0;
       const targetRoomIdx = targetFlat && targetFlat._roomIndex != null ? targetFlat._roomIndex : 0;
 
+      const isSameRes = targetRes && targetRes.id === draggedRes.id;
+
+      // ── Immutable room update: create new reservation objects ──
+      // (in-place mutation was unreliable — create fresh objects and replace in array)
+      const draggedIdx = globals.reservations.indexOf(draggedRes);
+      const targetIdx = targetRes ? globals.reservations.indexOf(targetRes) : -1;
+
       if (targetRes) {
         // Swap rooms
         const oldRoom = draggedFlat.room;
-        draggedRes.room = targetRoom;
-        targetRes.room = oldRoom;
-        if (draggedRes.rooms && draggedRes.rooms[draggedRoomIdx]) draggedRes.rooms[draggedRoomIdx].roomNumber = targetRoom;
-        if (targetRes.rooms && targetRes.rooms[targetRoomIdx]) targetRes.rooms[targetRoomIdx].roomNumber = oldRoom;
-        setToastMessage(`Swapped ${draggedRes.guest} ↔ ${targetRes.guest}`);
+        if (isSameRes) {
+          const newRooms = draggedRes.rooms.map((r, i) => {
+            if (i === draggedRoomIdx) return { ...r, roomNumber: targetRoom };
+            if (i === targetRoomIdx) return { ...r, roomNumber: oldRoom };
+            return { ...r };
+          });
+          const updated = { ...draggedRes, rooms: newRooms };
+          if (draggedIdx >= 0) globals.reservations[draggedIdx] = updated;
+        } else {
+          const newDraggedRooms = draggedRes.rooms.map((r, i) =>
+            i === draggedRoomIdx ? { ...r, roomNumber: targetRoom } : { ...r }
+          );
+          const updatedDragged = {
+            ...draggedRes, rooms: newDraggedRooms,
+            room: (!draggedRes.rooms || draggedRes.rooms.length <= 1) ? targetRoom : draggedRes.room
+          };
+          if (draggedIdx >= 0) globals.reservations[draggedIdx] = updatedDragged;
+
+          const newTargetRooms = targetRes.rooms.map((r, i) =>
+            i === targetRoomIdx ? { ...r, roomNumber: oldRoom } : { ...r }
+          );
+          const updatedTarget = {
+            ...targetRes, rooms: newTargetRooms,
+            room: (!targetRes.rooms || targetRes.rooms.length <= 1) ? oldRoom : targetRes.room
+          };
+          if (targetIdx >= 0) globals.reservations[targetIdx] = updatedTarget;
+        }
+        setToastMessage(`Swapped ${getGuestName(draggedFlat)} (${draggedRes.bookingRef}) ↔ ${getGuestName(targetFlat)}`);
       } else {
         // Move to empty room
-        draggedRes.room = targetRoom;
-        if (draggedRes.rooms && draggedRes.rooms[draggedRoomIdx]) draggedRes.rooms[draggedRoomIdx].roomNumber = targetRoom;
-        setToastMessage(`Moved ${draggedRes.guest} to room ${targetRoom}`);
+        const newRooms = draggedRes.rooms.map((r, i) =>
+          i === draggedRoomIdx ? { ...r, roomNumber: targetRoom } : { ...r }
+        );
+        const updatedRes = {
+          ...draggedRes, rooms: newRooms,
+          room: (!draggedRes.rooms || draggedRes.rooms.length <= 1) ? targetRoom : draggedRes.room
+        };
+        if (draggedIdx >= 0) globals.reservations[draggedIdx] = updatedRes;
+        setToastMessage(`Moved ${getGuestName(draggedFlat)} (${draggedRes.bookingRef}) from ${dragFromRoom} → ${targetRoom}`);
       }
 
-      saveReservationSingle(draggedRes);
+      // Save directly to localStorage + sync to Supabase
+      try { localStorage.setItem(lsKey('hotelReservations'), JSON.stringify(globals.reservations)); } catch (e) {}
+      const savedRes = globals.reservations[draggedIdx >= 0 ? draggedIdx : 0];
+      syncReservation(savedRes);
+      if (targetRes && !isSameRes && targetIdx >= 0) syncReservation(globals.reservations[targetIdx]);
+
       document.querySelectorAll('.drag-highlight').forEach(el => el.classList.remove('drag-highlight'));
       dragResRef.current = null;
       dragRoomRef.current = null;
       dropTargetRef.current = null;
+      setDragVersion(v => v + 1); // Force re-render with updated flatEntries
       setDragActive(false);
     };
 
@@ -249,32 +297,35 @@ const CalendarView = (props) => {
     const todayMidnight = new Date(todayDate);
     todayMidnight.setHours(0, 0, 0, 0);
 
+    // Helper: date classification with check-in status awareness
+    const isArrivingToday = (r) => {
+      const ci = new Date(r.checkin); ci.setHours(0, 0, 0, 0);
+      return ci.getTime() === todayMidnight.getTime();
+    };
+    const isCheckedInToday = (r) => isArrivingToday(r) && r.reservationStatus === 'checked-in';
+    const isLeavingToday = (r) => {
+      const co = new Date(r.checkout); co.setHours(0, 0, 0, 0);
+      if (co.getTime() !== todayMidnight.getTime()) return false;
+      // Exclude already checked-out (use room-level status for multi-room accuracy)
+      const roomStatus = r._roomData?.status || r.reservationStatus;
+      return roomStatus !== 'checked-out';
+    };
+    const isInHouse = (r) => {
+      const ci = new Date(r.checkin); ci.setHours(0, 0, 0, 0);
+      const co = new Date(r.checkout); co.setHours(0, 0, 0, 0);
+      return ci < todayMidnight && co > todayMidnight;
+    };
+
     const counts = {
       all: flatEntries.filter(r => {
         if (!r.guest) return false;
-        const checkinMidnight = new Date(r.checkin);
-        checkinMidnight.setHours(0, 0, 0, 0);
-        const checkoutMidnight = new Date(r.checkout);
-        checkoutMidnight.setHours(0, 0, 0, 0);
-        return checkinMidnight <= todayMidnight && checkoutMidnight >= todayMidnight;
+        const ci = new Date(r.checkin); ci.setHours(0, 0, 0, 0);
+        const co = new Date(r.checkout); co.setHours(0, 0, 0, 0);
+        return ci <= todayMidnight && co >= todayMidnight;
       }).length,
-      reserved: flatEntries.filter(r => {
-        const checkinMidnight = new Date(r.checkin);
-        checkinMidnight.setHours(0, 0, 0, 0);
-        return checkinMidnight.getTime() === todayMidnight.getTime();
-      }).length,
-      checkedout: flatEntries.filter(r => {
-        const checkoutMidnight = new Date(r.checkout);
-        checkoutMidnight.setHours(0, 0, 0, 0);
-        return checkoutMidnight.getTime() === todayMidnight.getTime();
-      }).length,
-      checkedin: flatEntries.filter(r => {
-        const checkinMidnight = new Date(r.checkin);
-        checkinMidnight.setHours(0, 0, 0, 0);
-        const checkoutMidnight = new Date(r.checkout);
-        checkoutMidnight.setHours(0, 0, 0, 0);
-        return checkinMidnight < todayMidnight && checkoutMidnight > todayMidnight;
-      }).length,
+      reserved: flatEntries.filter(r => isArrivingToday(r) && !isCheckedInToday(r)).length,
+      checkedout: flatEntries.filter(r => isLeavingToday(r)).length,
+      checkedin: flatEntries.filter(r => isInHouse(r) || isCheckedInToday(r)).length,
     };
 
     const filteredRooms = calendarActiveFilter === 'all'
@@ -289,11 +340,13 @@ const CalendarView = (props) => {
             checkoutMidnight.setHours(0, 0, 0, 0);
 
             if (calendarActiveFilter === 'reserved') {
-              return checkinMidnight.getTime() === todayMidnight.getTime();
+              return checkinMidnight.getTime() === todayMidnight.getTime() && !isCheckedInToday(r);
             } else if (calendarActiveFilter === 'checkedout') {
-              return checkoutMidnight.getTime() === todayMidnight.getTime();
+              // Only show rooms that still need to check out (exclude already checked-out)
+              const roomStatus = r._roomData?.status || r.reservationStatus;
+              return checkoutMidnight.getTime() === todayMidnight.getTime() && roomStatus !== 'checked-out';
             } else if (calendarActiveFilter === 'checkedin') {
-              return checkinMidnight < todayMidnight && checkoutMidnight > todayMidnight;
+              return (checkinMidnight < todayMidnight && checkoutMidnight > todayMidnight) || isCheckedInToday(r);
             }
             return false;
           });
@@ -543,7 +596,7 @@ const CalendarView = (props) => {
               const roomData = activeRes || flatEntries.find(r => r.room === room);
               const isClean = roomData ? housekeepingStatus[roomData.id] === 'clean' : true;
               return (
-                <React.Fragment key={room}>
+                <React.Fragment key={`${room}-${dragVersion}`}>
                   <div className="cal-room-cell" data-room-drag={room}
                     onClick={() => { if (roomData && roomData.guest) { setPreviousPage(activePage); setSelectedReservation(roomData); } }}
                     onDragOver={(e) => handleRowDragOver(e, room)}

@@ -1,6 +1,6 @@
 import React from 'react';
 import globals from '../globals.js';
-import { noTypeDateKey, deriveReservationDates } from '../utils.js';
+import { noTypeDateKey, deriveReservationDates, toDateStr, toDate } from '../utils.js';
 import { Icons } from '../icons.jsx';
 import { SUPPORTED_LANGUAGES, detectLanguageFromPhone, saveCompanyRegistry } from '../config.js';
 import { fetchVIES } from '../utils.js';
@@ -15,17 +15,17 @@ const DetailOverviewTab = ({ dp }) => {
                 <div className="px-4 py-2.5 bg-neutral-50 border-b border-neutral-200 flex items-center justify-between relative">
                   <div className="flex items-center gap-2 text-xs text-neutral-600">
                     <input type="date" onKeyDown={noTypeDateKey}
-                      value={(() => { const ci = ed.checkin || (ed.rooms && ed.rooms.length > 0 ? ed.rooms.reduce((min, r) => { const d = new Date(r.checkin); return d < min ? d : min; }, new Date(ed.rooms[0].checkin)) : null); return ci ? (ci instanceof Date ? ci : new Date(ci)).toISOString().slice(0, 10) : ''; })()}
+                      value={(() => { const ci = ed.checkin || (ed.rooms && ed.rooms.length > 0 ? ed.rooms.reduce((min, r) => { const d = new Date(r.checkin); return d < min ? d : min; }, new Date(ed.rooms[0].checkin)) : null); return ci ? toDateStr(ci instanceof Date ? ci : new Date(ci)) : ''; })()}
                       onChange={(e) => {
-                        const newCheckin = new Date(e.target.value);
-                        if (isNaN(newCheckin)) return;
-                        const edCo = ed.checkout ? new Date(ed.checkout) : new Date(ed.rooms[0].checkout);
+                        const newCheckin = toDate(e.target.value);
+                        if (!newCheckin) return;
+                        const edCo = toDate(ed.checkout) || toDate(ed.rooms[0].checkout);
                         if (newCheckin >= edCo) { setToastMessage('Check-in must be before check-out'); return; }
                         const next = JSON.parse(JSON.stringify(ed));
                         next.rooms.forEach((room, ri) => {
-                          const co = room.checkout ? new Date(room.checkout) : edCo;
+                          const co = toDate(room.checkout) || edCo;
                           if (newCheckin >= co) return;
-                          next.rooms[ri].checkin = newCheckin.toISOString();
+                          next.rooms[ri].checkin = e.target.value + 'T00:00:00';
                         });
                         deriveReservationDates(next);
                         setPendingDateChange({ next, source: 'reservation' });
@@ -33,17 +33,17 @@ const DetailOverviewTab = ({ dp }) => {
                       className="font-medium text-neutral-900 bg-transparent border-0 border-b border-dashed border-neutral-300 px-0 py-0 text-xs cursor-pointer focus:outline-none focus:border-neutral-900 w-[110px]" />
                     <span className="text-neutral-400">&rarr;</span>
                     <input type="date" onKeyDown={noTypeDateKey}
-                      value={(() => { const co = ed.checkout || (ed.rooms && ed.rooms.length > 0 ? ed.rooms.reduce((max, r) => { const d = new Date(r.checkout); return d > max ? d : max; }, new Date(ed.rooms[0].checkout)) : null); return co ? (co instanceof Date ? co : new Date(co)).toISOString().slice(0, 10) : ''; })()}
+                      value={(() => { const co = ed.checkout || (ed.rooms && ed.rooms.length > 0 ? ed.rooms.reduce((max, r) => { const d = new Date(r.checkout); return d > max ? d : max; }, new Date(ed.rooms[0].checkout)) : null); return co ? toDateStr(co instanceof Date ? co : new Date(co)) : ''; })()}
                       onChange={(e) => {
-                        const newCheckout = new Date(e.target.value);
-                        if (isNaN(newCheckout)) return;
-                        const edCi = ed.checkin ? new Date(ed.checkin) : new Date(ed.rooms[0].checkin);
+                        const newCheckout = toDate(e.target.value);
+                        if (!newCheckout) return;
+                        const edCi = toDate(ed.checkin) || toDate(ed.rooms[0].checkin);
                         if (newCheckout <= edCi) { setToastMessage('Check-out must be after check-in'); return; }
                         const next = JSON.parse(JSON.stringify(ed));
                         next.rooms.forEach((room, ri) => {
-                          const ci = room.checkin ? new Date(room.checkin) : edCi;
+                          const ci = toDate(room.checkin) || edCi;
                           if (newCheckout <= ci) return;
-                          next.rooms[ri].checkout = newCheckout.toISOString();
+                          next.rooms[ri].checkout = e.target.value + 'T00:00:00';
                         });
                         deriveReservationDates(next);
                         setPendingDateChange({ next, source: 'reservation' });

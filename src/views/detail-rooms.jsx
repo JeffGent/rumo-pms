@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import globals from '../globals.js';
-import { noTypeDateKey, deriveReservationDates, buildFlatRoomEntries, formatDate } from '../utils.js';
+import { noTypeDateKey, deriveReservationDates, buildFlatRoomEntries, formatDate, toDateStr, toDate } from '../utils.js';
 import { Icons } from '../icons.jsx';
 import { getAllRooms, getRoomType, getRoomTypeName, SUPPORTED_LANGUAGES, detectLanguageFromPhone, lsKey, getExtraPrice, getHotelAddress, saveGuestProfiles } from '../config.js';
 
@@ -547,14 +547,14 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + confirmed
                         <div>
                           <div className="text-xs font-medium text-neutral-400 uppercase tracking-wider mb-0.5">Check-in</div>
                           <input type="date" onKeyDown={noTypeDateKey}
-                            value={room.checkin ? (room.checkin instanceof Date ? room.checkin.toISOString().slice(0, 10) : new Date(room.checkin).toISOString().slice(0, 10)) : ''}
+                            value={room.checkin ? toDateStr(room.checkin instanceof Date ? room.checkin : new Date(room.checkin)) : ''}
                             onChange={(e) => {
-                              const newCheckin = new Date(e.target.value);
-                              if (isNaN(newCheckin)) return;
-                              const co = room.checkout ? new Date(room.checkout) : new Date(ed.checkout || reservation.checkout);
+                              const newCheckin = toDate(e.target.value);
+                              if (!newCheckin) return;
+                              const co = toDate(room.checkout) || toDate(ed.checkout || reservation.checkout);
                               if (newCheckin >= co) { setToastMessage('Check-in must be before check-out'); return; }
                               const next = JSON.parse(JSON.stringify(ed));
-                              next.rooms[ri].checkin = newCheckin.toISOString();
+                              next.rooms[ri].checkin = e.target.value + 'T00:00:00';
                               deriveReservationDates(next);
                               setPendingDateChange({ next, source: 'room', roomIndex: ri });
                             }}
@@ -563,14 +563,14 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + confirmed
                         <div>
                           <div className="text-xs font-medium text-neutral-400 uppercase tracking-wider mb-0.5">Check-out</div>
                           <input type="date" onKeyDown={noTypeDateKey}
-                            value={room.checkout ? (room.checkout instanceof Date ? room.checkout.toISOString().slice(0, 10) : new Date(room.checkout).toISOString().slice(0, 10)) : ''}
+                            value={room.checkout ? toDateStr(room.checkout instanceof Date ? room.checkout : new Date(room.checkout)) : ''}
                             onChange={(e) => {
-                              const newCheckout = new Date(e.target.value);
-                              if (isNaN(newCheckout)) return;
-                              const ci = room.checkin ? new Date(room.checkin) : new Date(ed.checkin || reservation.checkin);
+                              const newCheckout = toDate(e.target.value);
+                              if (!newCheckout) return;
+                              const ci = toDate(room.checkin) || toDate(ed.checkin || reservation.checkin);
                               if (newCheckout <= ci) { setToastMessage('Check-out must be after check-in'); return; }
                               const next = JSON.parse(JSON.stringify(ed));
-                              next.rooms[ri].checkout = newCheckout.toISOString();
+                              next.rooms[ri].checkout = e.target.value + 'T00:00:00';
                               deriveReservationDates(next);
                               setPendingDateChange({ next, source: 'room', roomIndex: ri });
                             }}
@@ -1146,7 +1146,7 @@ ${invPayments.length > 0 ? '<div class="payments"><h3>Payments</h3>' + confirmed
                           const next = JSON.parse(JSON.stringify(ed));
                           const nights = [];
                           for (let d = new Date(addCi); d < addCo; d.setDate(d.getDate() + 1)) {
-                            nights.push({ date: d.toISOString().slice(0, 10), amount: nightlyRate });
+                            nights.push({ date: toDateStr(d), amount: nightlyRate });
                           }
                           next.rooms.push({
                             roomNumber: rm, roomType: rtName,

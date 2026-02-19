@@ -6,7 +6,10 @@ import React from 'react';
 /** Convert any date-like value to ISO date string "YYYY-MM-DD" */
 export const toDateStr = (d) => {
   if (!d) return '';
-  if (d instanceof Date) return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
+  if (d instanceof Date) {
+    if (isNaN(d.getTime())) return '';
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
   return String(d).slice(0, 10);
 };
 
@@ -48,8 +51,8 @@ export const deriveReservationDates = (res) => {
   if (!res.rooms || res.rooms.length === 0) return;
   const checkins = res.rooms.map(r => new Date(r.checkin)).filter(d => !isNaN(d));
   const checkouts = res.rooms.map(r => new Date(r.checkout)).filter(d => !isNaN(d));
-  if (checkins.length > 0) res.checkin = new Date(Math.min(...checkins)).toISOString();
-  if (checkouts.length > 0) res.checkout = new Date(Math.max(...checkouts)).toISOString();
+  if (checkins.length > 0) res.checkin = new Date(Math.min(...checkins));
+  if (checkouts.length > 0) res.checkout = new Date(Math.max(...checkouts));
 };
 
 // Build flat room entries: explode multi-room reservations into 1 entry per room

@@ -7,7 +7,7 @@ import {
 } from './config.js';
 
 // Data version — increment to force regeneration when model changes
-export const DATA_VERSION = 52;
+export const DATA_VERSION = 57;
 
 // ── Reservation Generator ───────────────────────────────────────────────────
 const generateReservations = () => {
@@ -143,24 +143,24 @@ const generateReservations = () => {
     const nightPrices = [];
     for (let d = 0; d < stayLength; d++) {
       const nightDate = addDays(checkin, d);
-      nightPrices.push({ date: nightDate.toISOString().split('T')[0], amount: nightlyRate + Math.floor(Math.random() * 20) - 10 });
+      nightPrices.push({ date: toDateStr(nightDate), amount: nightlyRate + Math.floor(Math.random() * 20) - 10 });
     }
     const payments = [];
     const paidAmount = Math.floor(price * paidPercentage);
     if (paidAmount > 0) {
       const numPayments = paidAmount > 200 && Math.random() > 0.4 ? (Math.random() > 0.5 ? 3 : 2) : 1;
       if (numPayments === 1) {
-        payments.push({ id: 1, date: addDays(checkin, -Math.floor(Math.random() * 14)).toISOString().split('T')[0], amount: paidAmount, method: paymentMethods[Math.floor(Math.random() * paymentMethods.length)], note: paidPercentage < 1 ? 'Deposit' : '', status: 'completed', linkedInvoice: null });
+        payments.push({ id: 1, date: toDateStr(addDays(checkin, -Math.floor(Math.random() * 14))), amount: paidAmount, method: paymentMethods[Math.floor(Math.random() * paymentMethods.length)], note: paidPercentage < 1 ? 'Deposit' : '', status: 'completed', linkedInvoice: null });
       } else if (numPayments === 2) {
         const first = Math.floor(paidAmount * (0.4 + Math.random() * 0.3));
-        payments.push({ id: 1, date: addDays(checkin, -Math.floor(Math.random() * 14) - 7).toISOString().split('T')[0], amount: first, method: paymentMethods[Math.floor(Math.random() * paymentMethods.length)], note: 'Deposit', status: 'completed', linkedInvoice: null });
-        payments.push({ id: 2, date: addDays(checkin, -Math.floor(Math.random() * 5)).toISOString().split('T')[0], amount: paidAmount - first, method: paymentMethods[Math.floor(Math.random() * paymentMethods.length)], note: '', status: 'completed', linkedInvoice: null });
+        payments.push({ id: 1, date: toDateStr(addDays(checkin, -Math.floor(Math.random() * 14) - 7)), amount: first, method: paymentMethods[Math.floor(Math.random() * paymentMethods.length)], note: 'Deposit', status: 'completed', linkedInvoice: null });
+        payments.push({ id: 2, date: toDateStr(addDays(checkin, -Math.floor(Math.random() * 5))), amount: paidAmount - first, method: paymentMethods[Math.floor(Math.random() * paymentMethods.length)], note: '', status: 'completed', linkedInvoice: null });
       } else {
         const first = Math.floor(paidAmount * 0.3);
         const second = Math.floor(paidAmount * 0.4);
-        payments.push({ id: 1, date: addDays(checkin, -Math.floor(Math.random() * 20) - 10).toISOString().split('T')[0], amount: first, method: paymentMethods[Math.floor(Math.random() * paymentMethods.length)], note: 'Deposit', status: 'completed', linkedInvoice: null });
-        payments.push({ id: 2, date: addDays(checkin, -Math.floor(Math.random() * 7) - 3).toISOString().split('T')[0], amount: second, method: paymentMethods[Math.floor(Math.random() * paymentMethods.length)], note: '2nd payment', status: 'completed', linkedInvoice: null });
-        payments.push({ id: 3, date: addDays(checkin, -Math.floor(Math.random() * 2)).toISOString().split('T')[0], amount: paidAmount - first - second, method: paymentMethods[Math.floor(Math.random() * paymentMethods.length)], note: 'Final', status: 'completed', linkedInvoice: null });
+        payments.push({ id: 1, date: toDateStr(addDays(checkin, -Math.floor(Math.random() * 20) - 10)), amount: first, method: paymentMethods[Math.floor(Math.random() * paymentMethods.length)], note: 'Deposit', status: 'completed', linkedInvoice: null });
+        payments.push({ id: 2, date: toDateStr(addDays(checkin, -Math.floor(Math.random() * 7) - 3)), amount: second, method: paymentMethods[Math.floor(Math.random() * paymentMethods.length)], note: '2nd payment', status: 'completed', linkedInvoice: null });
+        payments.push({ id: 3, date: toDateStr(addDays(checkin, -Math.floor(Math.random() * 2))), amount: paidAmount - first - second, method: paymentMethods[Math.floor(Math.random() * paymentMethods.length)], note: 'Final', status: 'completed', linkedInvoice: null });
       }
     }
     const calcExtraQty = (cat, guests, nights) => {
@@ -223,21 +223,14 @@ const generateReservations = () => {
     };
   };
 
-  // Phase 1: Fill rooms sequentially targeting ~30% occupancy
-  // Gap zone: 2 days before and after today are kept empty for demo clarity
-  const gapFrom = -2, gapTo = 3;
+  // Phase 1: Fill rooms sequentially targeting ~50% occupancy
   rooms.forEach(room => {
     let currentDay = -30;
     while (currentDay < 30) {
-      if (Math.random() < 0.70) currentDay += 1 + Math.floor(Math.random() * 4);
+      if (Math.random() < 0.65) currentDay += 1 + Math.floor(Math.random() * 4);
       if (currentDay >= 30) break;
       const stayLength = getRandomStayLength();
       if (currentDay + stayLength > 32) break;
-      // Skip if reservation overlaps the gap zone around today
-      if (currentDay + stayLength > gapFrom && currentDay < gapTo) {
-        currentDay = gapTo;
-        continue;
-      }
       const res = makeReservation(room, currentDay, stayLength, null);
       delete res._guestObj; delete res._bookedVia; delete res._stayPurpose;
       reservations.push(res);
@@ -347,9 +340,8 @@ const getReservations = () => {
     }
   } catch (e) { console.error('Error loading reservations:', e); }
 
-  // DATA_VERSION changed or no stored data — clear supabaseSeeded so cloud pull
-  // takes precedence on next initialSync (prevents random demo data overwriting cloud)
-  try { localStorage.removeItem(lsKey('supabaseSeeded')); } catch (_) {}
+  // Note: do NOT remove supabaseSeeded here — that would cause pullFromSupabase
+  // to overwrite the freshly generated data with stale cloud data on next reload.
 
   const newReservations = generateReservations();
   try {

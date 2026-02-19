@@ -4,7 +4,7 @@ import { ROLE_PERMISSIONS, canAccessPage, hasFeature, lsKey, getAllRooms } from 
 import { generateInitialMessages, clearCurrentUser } from './data.js';
 import { initialSync, onSyncChange, saveReservationSingle, saveReservations } from './supabase.js';
 import { ReservationService } from './services.js';
-import { deriveReservationDates } from './utils.js';
+import { deriveReservationDates, toDateStr } from './utils.js';
 import { ErrorBoundary } from './utils.js';
 import Icons from './icons.jsx';
 
@@ -230,8 +230,8 @@ const ModernHotelPMS = () => {
     if (selectedReservation && selectedReservation.rooms && selectedReservation.rooms[0]) {
       const r0 = selectedReservation.rooms[0];
       setAddRoomDates({
-        checkin: r0.checkin ? new Date(r0.checkin).toISOString().slice(0, 10) : (selectedReservation.checkin ? new Date(selectedReservation.checkin).toISOString().slice(0, 10) : ''),
-        checkout: r0.checkout ? new Date(r0.checkout).toISOString().slice(0, 10) : (selectedReservation.checkout ? new Date(selectedReservation.checkout).toISOString().slice(0, 10) : '')
+        checkin: r0.checkin ? toDateStr(new Date(r0.checkin)) : (selectedReservation.checkin ? toDateStr(new Date(selectedReservation.checkin)) : ''),
+        checkout: r0.checkout ? toDateStr(new Date(r0.checkout)) : (selectedReservation.checkout ? toDateStr(new Date(selectedReservation.checkout)) : '')
       });
     }
   }, [selectedReservation]);
@@ -275,6 +275,9 @@ const ModernHotelPMS = () => {
       updatedAt: now,
       updatedBy: globals.currentUser?.name || '',
       reservationStatus: derivedStatus,
+      // Sync legacy boolean flags from canonical reservationStatus
+      isCheckedIn: derivedStatus === 'checked-in',
+      isCheckedOut: derivedStatus === 'checked-out',
       rooms: (editingReservation.rooms || []).map(room => ({
         ...room,
         checkin: room.checkin ? new Date(room.checkin) : new Date(editingReservation.checkin),
@@ -285,6 +288,15 @@ const ModernHotelPMS = () => {
     globals.reservations[idx] = updated;
     lastSavedAtRef.current = now; // track our own save so we don't self-block
     saveReservationSingle(updated);
+    // Clear stale checkedInRooms toggle when status changes away from checked-in
+    if (derivedStatus !== 'checked-in') {
+      setCheckedInRooms(prev => {
+        if (prev[editingReservation.id] === undefined) return prev;
+        const next = { ...prev };
+        delete next[editingReservation.id];
+        return next;
+      });
+    }
   }, [editingReservation]);
 
   // Multi-tab conflict detection + auto-refresh when other editor leaves
@@ -909,7 +921,7 @@ const ModernHotelPMS = () => {
                   (curEd?.rooms?.[ri]?.nightPrices || []).forEach(n => { existingMap[n.date] = n.amount; });
                   const nights = [];
                   for (let d = new Date(ci); d < co; d.setDate(d.getDate() + 1)) {
-                    const key = d.toISOString().slice(0, 10);
+                    const key = toDateStr(d);
                     nights.push({ date: key, amount: existingMap[key] || 0 });
                   }
                   next.rooms[ri].nightPrices = nights;
@@ -930,7 +942,7 @@ const ModernHotelPMS = () => {
                   const co = new Date(room.checkout);
                   const nights = [];
                   for (let d = new Date(ci); d < co; d.setDate(d.getDate() + 1)) {
-                    nights.push({ date: d.toISOString().slice(0, 10), amount: 0 });
+                    nights.push({ date: toDateStr(d), amount: 0 });
                   }
                   next.rooms[ri].nightPrices = nights;
                 });
@@ -997,13 +1009,37 @@ const ModernHotelPMS = () => {
         </div>
         );
       })()}
-      {toastMessage && (
-        <div className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-[200] px-6 py-3 bg-neutral-900 text-white rounded-2xl shadow-2xl text-sm font-medium flex items-center gap-3"
+      {toastMessage && (() => {
+        const msg = typeof toastMessage === 'object' ? toastMessage.message : toastMessage;
+        const explicit = typeof toastMessage === 'object' ? toastMessage.type : null;
+        const isNeg = explicit === 'error' || (!explicit && /^(Please |Cannot |No |Invalid |Fix |Enable |Select (a |date)|At least |Enter )|must be|not found|failed|already assigned|under \d|must be at least/i.test(msg));
+        const bg = isNeg ? 'bg-amber-50' : 'bg-emerald-50';
+        const border = isNeg ? 'border-amber-300' : 'border-emerald-300';
+        const iconColor = isNeg ? 'text-amber-600' : 'text-emerald-600';
+        const textColor = isNeg ? 'text-amber-900' : 'text-emerald-900';
+        return (
+        <div className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-[200] max-w-lg w-[calc(100%-2rem)]"
           style={{ animation: 'fadeIn 0.2s ease-out' }}>
-          <Icons.Check className="w-4 h-4 text-emerald-400" />
-          {toastMessage}
+          <div className={`${bg} border ${border} rounded-2xl shadow-2xl px-5 py-3`}>
+            <div className="flex items-center gap-3">
+              {isNeg ? (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`w-4 h-4 ${iconColor} flex-shrink-0`}>
+                  <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={`w-4 h-4 ${iconColor} flex-shrink-0`}>
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              )}
+              <span className={`text-sm font-medium ${textColor}`}>{msg}</span>
+              <button onClick={() => setToastMessage(null)} className="ml-auto p-0.5 hover:bg-black/5 rounded-lg transition-colors flex-shrink-0">
+                <Icons.X className={`w-3.5 h-3.5 ${isNeg ? 'text-amber-500' : 'text-emerald-500'}`} />
+              </button>
+            </div>
+          </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Spotlight Tour */}
       {tourActive && <SpotlightTour tourId={tourActive} onComplete={() => setTourActive(null)} />}

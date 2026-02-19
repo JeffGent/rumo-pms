@@ -1,7 +1,7 @@
 import React from 'react';
 import globals from '../globals.js';
 import Icons from '../icons.jsx';
-import { noTypeDateKey } from '../utils.js';
+import { noTypeDateKey, toDateStr } from '../utils.js';
 import { canAccessPage, saveCashRegister } from '../config.js';
 import { saveReservationSingle } from '../supabase.js';
 
@@ -300,7 +300,7 @@ const PaymentsView = (props) => {
       const totalProcessed = rumoPayPayments.reduce((s, p) => s + p.amount, 0);
       const txCount = rumoPayPayments.length;
       const avgTx = txCount > 0 ? totalProcessed / txCount : 0;
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = toDateStr(new Date());
       const todayPayments = allPayments.filter(p => p.date === todayStr && isRumoPayMethod(p.method));
       const todayTotal = todayPayments.reduce((s, p) => s + p.amount, 0);
       const pendingPayments = allPayments.filter(p => p.status === 'pending' || p.status === 'request-sent');
@@ -441,7 +441,7 @@ const PaymentsView = (props) => {
         const maxId = (res.payments || []).reduce((m, p) => Math.max(m, p.id || 0), 0);
         const refundPayment = {
           id: maxId + 1,
-          date: new Date().toISOString().split('T')[0],
+          date: toDateStr(new Date()),
           amount: -amount,
           method: `Refund (${refundModal.method || 'Card'})`,
           note: refundNote || `Refund of ${refundModal.method} payment`,
@@ -838,7 +838,7 @@ const PaymentsView = (props) => {
         const d = new Date(p.date);
         const weekStart = new Date(d);
         weekStart.setDate(d.getDate() - d.getDay() + 1); // Monday
-        const key = weekStart.toISOString().split('T')[0];
+        const key = toDateStr(weekStart);
         if (!weeklyPayouts[key]) weeklyPayouts[key] = { start: weekStart, total: 0, count: 0, fee: 0 };
         weeklyPayouts[key].total += p.amount;
         weeklyPayouts[key].count++;
@@ -940,7 +940,7 @@ const PaymentsView = (props) => {
           const maxId = (globals.reservations[idx].payments || []).reduce((m, p) => Math.max(m, p.id || 0), 0);
           globals.reservations[idx].payments = [...(globals.reservations[idx].payments || []), {
             id: maxId + 1,
-            date: new Date().toISOString().split('T')[0],
+            date: toDateStr(new Date()),
             amount: fin.outstanding,
             method: `VCC (\u2022\u2022\u2022\u2022 ${entry.creditCard.last4})`,
             note: 'Manual VCC charge',
@@ -1313,7 +1313,7 @@ const PaymentsView = (props) => {
       if (!kassaForm || !kassaForm.amount || kassaForm.amount <= 0) return;
       const entry = {
         id: Date.now(),
-        date: new Date().toISOString().split('T')[0],
+        date: toDateStr(new Date()),
         type: kassaForm.type || 'in',
         amount: parseFloat(kassaForm.amount),
         description: kassaForm.description || '',

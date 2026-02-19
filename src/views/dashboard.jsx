@@ -2,10 +2,19 @@ import React from 'react';
 import globals from '../globals.js';
 import { formatDate, addDays, buildFlatRoomEntries, getGuestName } from '../utils.js';
 import { getAllRooms, getRoomTypeName, canAccessPage } from '../config.js';
+import { ReservationService } from '../services.js';
 import Icons from '../icons.jsx';
 
 const DashboardView = (props) => {
-  const { selectedDate, setSelectedDate, sidebarCollapsed, setSidebarCollapsed, activePage, setActivePage, activeFilter, setActiveFilter, checkedInRooms, totalRooms, setSelectedReservation, setPreviousPage, setNewReservationOpen, quickView, mounted, housekeepingStatus, toggleCheckInOut, cloudStatus } = props;
+  const { selectedDate, setSelectedDate, sidebarCollapsed, setSidebarCollapsed, activePage, setActivePage, activeFilter, setActiveFilter, checkedInRooms, totalRooms, setSelectedReservation, setPreviousPage, setNewReservationOpen, setReservationTab, quickView, mounted, housekeepingStatus, toggleCheckInOut: rawToggleCheckInOut, cloudStatus } = props;
+
+  // Track rooms toggled this dashboard session — they keep their original filter position.
+  // Resets on unmount (navigate away), so next visit reclassifies them.
+  const recentTogglesRef = React.useRef(new Set());
+  const toggleCheckInOut = (resId, isDeparting) => {
+    recentTogglesRef.current.add(resId);
+    rawToggleCheckInOut(resId, isDeparting);
+  };
 
   const StatusIndicator = ({ housekeeping }) => {
     if (housekeeping === 'clean') return null;
@@ -35,8 +44,20 @@ const DashboardView = (props) => {
                         reservation.status === 'available' ? '#e5e7eb' :
                         '#e5e7eb';
 
-    const paymentLabel = reservation.guest && reservation.paidPercentage !== undefined
-      ? (reservation.paidPercentage >= 1 ? 'Paid' : reservation.paidPercentage === 0 ? 'Unpaid' : 'Partial')
+    // Live payment percentage from actual payments & room prices (not stale paidPercentage field)
+    const livePP = (() => {
+      if (!reservation.guest) return undefined;
+      const totalPaid = (reservation.payments || []).filter(p => p.status === 'completed').reduce((s, p) => s + (p.amount || 0), 0);
+      const roomTotal = (reservation.rooms || []).reduce((sum, rm) => {
+        if (rm.priceType === 'fixed') return sum + (rm.fixedPrice || 0);
+        return sum + (rm.nightPrices || []).reduce((s, n) => s + (n.amount || 0), 0);
+      }, 0);
+      const extrasTotal = (reservation.extras || []).reduce((sum, ex) => sum + (ex.quantity || 0) * (ex.unitPrice || 0), 0);
+      const totalPrice = roomTotal + extrasTotal;
+      return totalPrice > 0 ? totalPaid / totalPrice : (totalPaid > 0 ? 1 : 0);
+    })();
+    const paymentLabel = livePP !== undefined
+      ? (livePP >= 1 ? 'Paid' : livePP === 0 ? 'Unpaid' : 'Partial')
       : null;
     const paymentColor = paymentLabel === 'Paid' ? '#059669' : paymentLabel === 'Unpaid' ? '#dc2626' : paymentLabel === 'Partial' ? '#d97706' : null;
 
@@ -95,25 +116,40 @@ const DashboardView = (props) => {
                       const isCheckedIn = vs === 'checked-in' && !isDeparting;
                       const isCheckedOut = vs === 'checked-out';
                       if (!canCheckIn && !canCheckOut && !isCheckedIn && !isCheckedOut) return null;
+                      // Payment status coloring (use live calculation)
+                      const pp = livePP !== undefined ? livePP : 0;
+                      const paidStyle = 'bg-neutral-100 text-neutral-500 border-neutral-200 hover:bg-neutral-200 hover:border-neutral-300';
+                      const paidStyleStatic = 'bg-neutral-100 text-neutral-500 border-neutral-200';
+                      const payBg = pp >= 1 ? paidStyle : pp > 0 ? 'bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100 hover:border-amber-300' : 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100 hover:border-red-300';
+                      const payBgStatic = pp >= 1 ? paidStyleStatic : pp > 0 ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-red-50 text-red-600 border-red-200';
                       if (canCheckIn) return (
                         <button onClick={(e) => { e.stopPropagation(); toggleCheckInOut(reservation.id, false); }}
-                          className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 hover:border-blue-300 transition-all" title="Check in">
+                          className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-medium transition-all border ${payBg}`} title="Check in">
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-2.5 h-2.5"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>IN
                         </button>
                       );
                       if (canCheckOut) return (
-                        <button onClick={(e) => { e.stopPropagation(); toggleCheckInOut(reservation.id, true); }}
-                          className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-600 border border-amber-200 hover:bg-amber-100 hover:border-amber-300 transition-all" title="Check out">
+                        <button onClick={(e) => {
+                          e.stopPropagation();
+                          const billingWarning = ReservationService.validateCheckout(reservation);
+                          toggleCheckInOut(reservation.id, true);
+                          if (billingWarning) {
+                            setPreviousPage(activePage);
+                            setSelectedReservation({ ...reservation, reservationStatus: 'checked-out', isCheckedOut: true });
+                            setReservationTab('billing');
+                          }
+                        }}
+                          className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-medium transition-all border ${payBg}`} title="Check out">
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-2.5 h-2.5"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>OUT
                         </button>
                       );
                       if (isCheckedIn) return (
-                        <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-600 border border-emerald-200">
+                        <span className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[11px] font-medium border ${payBgStatic}`}>
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="w-2.5 h-2.5"><polyline points="20 6 9 17 4 12"/></svg>IN
                         </span>
                       );
                       if (isCheckedOut) return (
-                        <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[11px] font-medium bg-neutral-100 text-neutral-400 border border-neutral-200">
+                        <span className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[11px] font-medium border ${payBgStatic}`}>
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="w-2.5 h-2.5"><polyline points="20 6 9 17 4 12"/></svg>OUT
                         </span>
                       );
@@ -142,7 +178,7 @@ const DashboardView = (props) => {
   };
 
   // Filter en bepaal status op basis van selectedDate
-  const getReservationsForDate = (date) => {
+  const getReservationsForDate = (date, preferDepartures = false) => {
     const selectedDateMidnight = new Date(date);
     selectedDateMidnight.setHours(0, 0, 0, 0);
 
@@ -150,14 +186,20 @@ const DashboardView = (props) => {
     const flatEntries = buildFlatRoomEntries(globals.reservations);
 
     return allRooms.map(room => {
-      const reservation = flatEntries.find(r => {
+      // Find all matching reservations for this room on selectedDate
+      const matches = flatEntries.filter(r => {
         if (r.room !== room) return false;
-        const checkinMidnight = new Date(r.checkin);
-        checkinMidnight.setHours(0, 0, 0, 0);
-        const checkoutMidnight = new Date(r.checkout);
-        checkoutMidnight.setHours(0, 0, 0, 0);
-        return checkinMidnight <= selectedDateMidnight && checkoutMidnight >= selectedDateMidnight;
+        const ci = new Date(r.checkin); ci.setHours(0, 0, 0, 0);
+        const co = new Date(r.checkout); co.setHours(0, 0, 0, 0);
+        return ci <= selectedDateMidnight && co >= selectedDateMidnight;
       });
+      // Same-day turnover: prefer departure when Leaving filter is active, otherwise prefer arrival
+      const reservation = matches.length > 1
+        ? (preferDepartures
+            ? matches.find(r => { const co = new Date(r.checkout); co.setHours(0, 0, 0, 0); return co.getTime() === selectedDateMidnight.getTime(); }) || matches[0]
+            : matches.find(r => { const ci = new Date(r.checkin); ci.setHours(0, 0, 0, 0); return ci.getTime() === selectedDateMidnight.getTime(); }) || matches[0]
+          )
+        : matches[0] || null;
 
       if (reservation) {
         const checkinMidnight = new Date(reservation.checkin);
@@ -175,15 +217,25 @@ const DashboardView = (props) => {
         if (reservation.reservationStatus === 'blocked') visualStatus = 'blocked';
         else if (reservation.isOption) visualStatus = 'option';
         else if (status === 'arriving') {
-          const checkedIn = manualToggle !== undefined ? !!manualToggle : reservation.isCheckedIn;
-          visualStatus = checkedIn ? 'checked-in' : 'reserved';
+          visualStatus = reservation.reservationStatus === 'checked-in' ? 'checked-in' : 'reserved';
         } else if (status === 'in-house') visualStatus = 'checked-in';
         else if (status === 'departing') {
-          const checkedOut = manualToggle !== undefined ? manualToggle : reservation.isCheckedOut;
-          visualStatus = checkedOut ? 'checked-out' : 'checked-in';
+          // Use reservation-level status, not checkedInRooms toggle (which conflates check-in/check-out)
+          visualStatus = reservation.reservationStatus === 'checked-out' ? 'checked-out' : 'checked-in';
         } else visualStatus = 'available';
 
         const resolvedCheckedInTime = (typeof manualToggle === 'string') ? manualToggle : reservation.checkedInTime;
+
+        // Reclassify rooms that were toggled in a previous session (not during this dashboard visit)
+        const justToggled = recentTogglesRef.current.has(reservation.id);
+        if (!justToggled) {
+          if (status === 'arriving' && visualStatus === 'checked-in') status = 'in-house';
+          if (status === 'departing' && visualStatus === 'checked-out') {
+            // Checked-out room becomes available — show as empty tile (keep housekeeping status)
+            return { id: `empty-${room}`, room, type: getRoomTypeName(room), guest: null, status: 'available', housekeeping: reservation.housekeeping || 'dirty' };
+          }
+        }
+
         return { ...reservation, status, visualStatus, resolvedCheckedInTime };
       } else {
         return { id: `empty-${room}`, room, type: getRoomTypeName(room), guest: null, status: 'available', housekeeping: 'clean' };
@@ -191,7 +243,7 @@ const DashboardView = (props) => {
     });
   };
 
-  const roomsForDate = getReservationsForDate(selectedDate);
+  const roomsForDate = getReservationsForDate(selectedDate, activeFilter === 'departing');
 
   const occupiedRooms = roomsForDate.filter(r => r.status !== 'available');
   const revenueRooms = occupiedRooms.filter(r => r.visualStatus !== 'blocked');
@@ -199,8 +251,24 @@ const DashboardView = (props) => {
   const revenue = revenueRooms.reduce((sum, r) => sum + (r.price || 0), 0);
   const avgRate = revenueRooms.length > 0 ? Math.round(revenue / revenueRooms.length) : 0;
   const revPar = Math.round(revenue / totalRooms);
-  const checkIns = roomsForDate.filter(r => r.status === 'arriving' && r.visualStatus !== 'blocked' && r.reservationStatus !== 'cancelled' && r.reservationStatus !== 'no-show').length;
-  const checkOuts = roomsForDate.filter(r => r.status === 'departing' && r.visualStatus !== 'blocked' && r.reservationStatus !== 'cancelled' && r.reservationStatus !== 'no-show').length;
+
+  // Accurate arriving/departing counts from flat entries (not limited by one-per-room)
+  const dateMidnight = new Date(selectedDate); dateMidnight.setHours(0, 0, 0, 0);
+  const allFlat = buildFlatRoomEntries(globals.reservations);
+  const checkIns = allFlat.filter(r => {
+    if (!r.guest || r.reservationStatus === 'cancelled' || r.reservationStatus === 'no-show' || r.reservationStatus === 'blocked') return false;
+    const ci = new Date(r.checkin); ci.setHours(0, 0, 0, 0);
+    if (ci.getTime() !== dateMidnight.getTime()) return false;
+    const roomStatus = r._roomData?.status || r.reservationStatus;
+    return roomStatus !== 'checked-in';
+  }).length;
+  const checkOuts = allFlat.filter(r => {
+    if (!r.guest || r.reservationStatus === 'cancelled' || r.reservationStatus === 'no-show' || r.reservationStatus === 'blocked') return false;
+    const co = new Date(r.checkout); co.setHours(0, 0, 0, 0);
+    if (co.getTime() !== dateMidnight.getTime()) return false;
+    const roomStatus = r._roomData?.status || r.reservationStatus;
+    return roomStatus !== 'checked-out';
+  }).length;
 
   const filteredRooms = roomsForDate.filter(room => {
     if (activeFilter === 'all') return true;
@@ -213,12 +281,21 @@ const DashboardView = (props) => {
   });
 
   const blockedCount = roomsForDate.filter(r => r.visualStatus === 'blocked').length;
+
+  // Billing alerts: departing rooms with billing issues
+  const billingAlertRooms = roomsForDate.filter(r => {
+    if (r.status !== 'departing' || !r.guest || r.visualStatus === 'blocked') return false;
+    return ReservationService.validateCheckout(r) !== null;
+  });
+  const billingAlertCount = billingAlertRooms.length;
+  const [billingAlertOpen, setBillingAlertOpen] = React.useState(false);
+
   const filterCounts = {
     all: roomsForDate.length,
     available: roomsForDate.filter(r => r.status === 'available').length,
     'in-house': roomsForDate.filter(r => r.status === 'in-house').length,
-    arriving: roomsForDate.filter(r => r.status === 'arriving' && r.visualStatus !== 'blocked' && r.reservationStatus !== 'cancelled' && r.reservationStatus !== 'no-show').length,
-    departing: roomsForDate.filter(r => r.status === 'departing' && r.visualStatus !== 'blocked' && r.reservationStatus !== 'cancelled' && r.reservationStatus !== 'no-show').length,
+    arriving: checkIns,
+    departing: checkOuts,
     blocked: blockedCount,
   };
 
@@ -301,7 +378,19 @@ const DashboardView = (props) => {
 
       {/* Room Grid */}
       <div className="mb-4 md:mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <h2 className="font-light text-neutral-900 font-serif text-xl">Room Status</h2>
+        <div className="flex items-center gap-3">
+          <h2 className="font-light text-neutral-900 font-serif text-xl">Room Status</h2>
+          {billingAlertCount > 0 && activeFilter === 'departing' && (
+            <button onClick={() => { setBillingAlertOpen(!billingAlertOpen); if (!billingAlertOpen) setActiveFilter('departing'); }}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${billingAlertOpen ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-amber-50 text-amber-600 border border-amber-200 hover:bg-amber-100'}`}
+              title="Departing rooms with billing issues">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+              {billingAlertCount}
+            </button>
+          )}
+        </div>
         <div data-tour="room-filters" className="flex flex-wrap gap-2 md:gap-4">
           {[
             { id: 'all', label: 'All Rooms' },
@@ -311,7 +400,7 @@ const DashboardView = (props) => {
             { id: 'departing', label: 'Leaving' },
             ...(blockedCount > 0 ? [{ id: 'blocked', label: 'Blocked' }] : []),
           ].map((filter) => (
-            <button key={filter.id} onClick={() => setActiveFilter(filter.id)}
+            <button key={filter.id} onClick={() => { setActiveFilter(filter.id); setBillingAlertOpen(false); }}
               className={`px-3 py-1.5 md:px-4 md:py-2 text-xs md:text-sm font-medium rounded-xl transition-all duration-200 ${
                 activeFilter === filter.id ? 'bg-neutral-900 text-white' : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100'
               }`}>
@@ -322,7 +411,7 @@ const DashboardView = (props) => {
       </div>
 
       <div data-tour="room-grid" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
-        {filteredRooms.map(reservation => (
+        {(billingAlertOpen ? billingAlertRooms : filteredRooms).map(reservation => (
           <RoomCard key={reservation.id} reservation={reservation} />
         ))}
       </div>

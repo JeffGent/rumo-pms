@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import globals from '../globals.js';
 import Icons from '../icons.jsx';
 import { lsKey, canAccessPage, getAllRooms, getRoomTypeName } from '../config.js';
-import { addDays, noTypeDateKey } from '../utils.js';
+import { addDays, noTypeDateKey, toDateStr } from '../utils.js';
 
 // ── Reports View ─────────────────────────────────────────────────────────────
 const ReportsView = (props) => {
@@ -728,7 +728,7 @@ const ReportsView = (props) => {
       // Daily occupancy
       const days = [];
       for (let d = new Date(rangeStart); d <= rangeEnd; d = addDays(d, 1)) {
-        const dayStr = d.toISOString().slice(0, 10);
+        const dayStr = toDateStr(d);
         let occupied = 0;
         let dayRevenue = 0;
         globals.reservations.forEach(r => {

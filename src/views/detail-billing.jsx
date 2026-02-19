@@ -1,6 +1,6 @@
 import React from 'react';
 import globals from '../globals.js';
-import { formatDate } from '../utils.js';
+import { formatDate, toDateStr } from '../utils.js';
 import { Icons } from '../icons.jsx';
 import { getNextInvoiceNumber } from '../config.js';
 
@@ -94,7 +94,7 @@ const DetailBillingTab = ({ dp }) => {
                   : { name: `${next.booker?.firstName || ''} ${next.booker?.lastName || ''}`.trim(), vatNumber: '', peppolId: '', address: br.address || '', zip: br.zip || '', city: br.city || '', country: br.country || '', email: next.booker?.email || '' };
               }
               const invoiceRef = (next.billingRecipient?.reference || '').trim();
-              next.invoices.push({ id: Date.now(), number: invNum, date: new Date().toISOString().split('T')[0], amount: selectedTotal, type, status: 'created', items: invoiceItems, linkedPayments: linkedPays, recipient, reference: invoiceRef || '' });
+              next.invoices.push({ id: Date.now(), number: invNum, date: toDateStr(new Date()), amount: selectedTotal, type, status: 'created', items: invoiceItems, linkedPayments: linkedPays, recipient, reference: invoiceRef || '' });
               next.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `${type === 'proforma' ? 'Proforma' : 'Invoice'} ${invNum} created (EUR ${selectedTotal}, ${selectedItems.length} items)${linkedPays.length > 0 ? ` — ${linkedPays.length} payment(s) linked` : ''}`, user: globals.currentUser?.name || 'System' });
               // Optional: check out all rooms
               if (checkout) {
@@ -129,7 +129,7 @@ const DetailBillingTab = ({ dp }) => {
                   ? { name: br.name, vatNumber: br.vatNumber, peppolId: br.peppolId, address: br.address, zip: br.zip, city: br.city, country: br.country, email: br.email }
                   : { name: `${ed.booker?.firstName || ''} ${ed.booker?.lastName || ''}`.trim(), vatNumber: '', address: br.address || '', zip: br.zip || '', city: br.city || '', country: br.country || '', email: ed.booker?.email || '' };
               }
-              const virtualInv = { number: 'PREVIEW', date: new Date().toISOString().split('T')[0], amount: total, type: 'proforma', status: 'preview', items: invoiceItems, linkedPayments: [], recipient, reference: (ed.billingRecipient?.reference || '').trim() };
+              const virtualInv = { number: 'PREVIEW', date: toDateStr(new Date()), amount: total, type: 'proforma', status: 'preview', items: invoiceItems, linkedPayments: [], recipient, reference: (ed.billingRecipient?.reference || '').trim() };
               window._printInvoice(virtualInv, ed, []);
             };
 
@@ -675,7 +675,7 @@ const DetailBillingTab = ({ dp }) => {
                               invObj.status = 'finalized';
                               // Create a real invoice with the same items + recipient
                               const newInvNum = getNextInvoiceNumber('invoice');
-                              next.invoices.push({ id: Date.now(), number: newInvNum, date: new Date().toISOString().split('T')[0], amount: inv.amount, type: 'invoice', status: 'created', items: inv.items ? inv.items.map(i => ({ ...i })) : [], linkedPayments: [], recipient: inv.recipient ? { ...inv.recipient } : null, reference: inv.reference || '', fromProforma: inv.number });
+                              next.invoices.push({ id: Date.now(), number: newInvNum, date: toDateStr(new Date()), amount: inv.amount, type: 'invoice', status: 'created', items: inv.items ? inv.items.map(i => ({ ...i })) : [], linkedPayments: [], recipient: inv.recipient ? { ...inv.recipient } : null, reference: inv.reference || '', fromProforma: inv.number });
                               // Unlink any payments from the proforma (user links them manually to the new invoice)
                               invPayments.forEach(p => { const pp = next.payments.find(pp => pp.id === p.id); if (pp) pp.linkedInvoice = null; });
                               next.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Proforma ${inv.number} finalized → invoice ${newInvNum}`, user: globals.currentUser?.name || 'System' });
@@ -705,7 +705,7 @@ const DetailBillingTab = ({ dp }) => {
                               const invObj = next.invoices.find(ii => ii.id === inv.id);
                               if (invObj) invObj.status = 'credited';
                               const creditNum = getNextInvoiceNumber('credit');
-                              next.invoices.push({ id: Date.now(), number: creditNum, date: new Date().toISOString().split('T')[0], amount: inv.amount, type: 'credit', status: 'created', items: inv.items || [], linkedPayments: [], creditFor: inv.number, recipient: inv.recipient ? { ...inv.recipient } : null, reference: inv.reference || '' });
+                              next.invoices.push({ id: Date.now(), number: creditNum, date: toDateStr(new Date()), amount: inv.amount, type: 'credit', status: 'created', items: inv.items || [], linkedPayments: [], creditFor: inv.number, recipient: inv.recipient ? { ...inv.recipient } : null, reference: inv.reference || '' });
                               // Unlink payments from credited invoice — return to unlinked pool
                               invPayments.forEach(p => { const pp = next.payments.find(pp => pp.id === p.id); if (pp) pp.linkedInvoice = null; });
                               if (invObj) invObj.linkedPayments = [];
@@ -756,7 +756,7 @@ const DetailBillingTab = ({ dp }) => {
                             // 1. Credit the original
                             invObj.status = 'credited';
                             const creditNum = getNextInvoiceNumber('credit');
-                            next.invoices.push({ id: Date.now(), number: creditNum, date: new Date().toISOString().split('T')[0], amount: inv.amount, type: 'credit', status: 'created', items: inv.items || [], linkedPayments: [], creditFor: inv.number, recipient: inv.recipient ? { ...inv.recipient } : null, reference: inv.reference || '' });
+                            next.invoices.push({ id: Date.now(), number: creditNum, date: toDateStr(new Date()), amount: inv.amount, type: 'credit', status: 'created', items: inv.items || [], linkedPayments: [], creditFor: inv.number, recipient: inv.recipient ? { ...inv.recipient } : null, reference: inv.reference || '' });
                             // Unlink payments from credited invoice
                             invPayments.forEach(p => { const pp = next.payments.find(pp => pp.id === p.id); if (pp) pp.linkedInvoice = null; });
                             // 2. Build new recipient
@@ -771,7 +771,7 @@ const DetailBillingTab = ({ dp }) => {
                             }
                             // 3. Create amended invoice with same items
                             const newInvNum = getNextInvoiceNumber('invoice');
-                            next.invoices.push({ id: Date.now() + 2, number: newInvNum, date: new Date().toISOString().split('T')[0], amount: inv.amount, type: 'invoice', status: 'created', items: inv.items ? inv.items.map(i => ({ ...i })) : [], linkedPayments: [], recipient: newRecipient, reference: inv.reference || '', amendsInvoice: inv.number });
+                            next.invoices.push({ id: Date.now() + 2, number: newInvNum, date: toDateStr(new Date()), amount: inv.amount, type: 'invoice', status: 'created', items: inv.items ? inv.items.map(i => ({ ...i })) : [], linkedPayments: [], recipient: newRecipient, reference: inv.reference || '', amendsInvoice: inv.number });
                             // Re-link payments to new invoice
                             invPayments.forEach(p => { const pp = next.payments.find(pp => pp.id === p.id); if (pp) pp.linkedInvoice = newInvNum; });
                             next.activityLog.push({ id: Date.now() + 3, timestamp: Date.now(), action: `Amended ${inv.number} → credit note ${creditNum} + new invoice ${newInvNum}${amendRecipient ? ` (recipient: ${newRecipient?.name || 'unknown'})` : ''}`, user: globals.currentUser?.name || 'System' });
@@ -1065,7 +1065,7 @@ const DetailBillingTab = ({ dp }) => {
                         <p className="text-xs text-neutral-500 mb-4">EUR {btPay.amount.toFixed(2)} — when was this payment received?</p>
                         <div className="mb-4">
                           <label className="block text-xs text-neutral-500 mb-1">Date received</label>
-                          <input type="date" id="btConfirmDate" defaultValue={new Date().toISOString().split('T')[0]}
+                          <input type="date" id="btConfirmDate" defaultValue={toDateStr(new Date())}
                             className="w-full px-3 py-2 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-300" />
                         </div>
                         <div className="flex gap-2">
@@ -1074,7 +1074,7 @@ const DetailBillingTab = ({ dp }) => {
                             Cancel
                           </button>
                           <button onClick={() => {
-                            const confirmDate = document.getElementById('btConfirmDate').value || new Date().toISOString().split('T')[0];
+                            const confirmDate = document.getElementById('btConfirmDate').value || toDateStr(new Date());
                             const next = JSON.parse(JSON.stringify(ed));
                             const p = next.payments.find(pp => pp.id === confirmBTPayment);
                             if (p) {
@@ -1259,7 +1259,7 @@ const DetailBillingTab = ({ dp }) => {
                         const amount = parseFloat(document.getElementById('terminalAmount').value) || 0;
                         if (amount <= 0) return;
                         const next = JSON.parse(JSON.stringify(ed));
-                        next.payments.push({ id: Date.now(), date: new Date().toISOString().split('T')[0], amount, method: 'Terminal', note: 'Sent to terminal', status: 'pending', linkedInvoice: null });
+                        next.payments.push({ id: Date.now(), date: toDateStr(new Date()), amount, method: 'Terminal', note: 'Sent to terminal', status: 'pending', linkedInvoice: null });
                         next.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Terminal payment request EUR ${amount}`, user: globals.currentUser?.name || 'System' });
                         setEditingReservation(next);
                         setToastMessage(`EUR ${amount} sent to terminal`);
@@ -1309,7 +1309,7 @@ const DetailBillingTab = ({ dp }) => {
                             const recipientEmail = recipientEl?.value;
                             if (amount <= 0 || !recipientEmail) return;
                             const next = JSON.parse(JSON.stringify(ed));
-                            next.payments.push({ id: Date.now(), date: new Date().toISOString().split('T')[0], amount, method: 'Email Request', note: `Sent to ${recipientEmail}`, status: 'request-sent', linkedInvoice: null });
+                            next.payments.push({ id: Date.now(), date: toDateStr(new Date()), amount, method: 'Email Request', note: `Sent to ${recipientEmail}`, status: 'request-sent', linkedInvoice: null });
                             // Auto-create reminder 24h from now to check payment
                             const reminderDue = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16);
                             if (!next.reminders) next.reminders = [];
@@ -1343,7 +1343,7 @@ const DetailBillingTab = ({ dp }) => {
                           const amount = parseFloat(document.getElementById('ccAmount').value) || 0;
                           if (amount <= 0) return;
                           const next = JSON.parse(JSON.stringify(ed));
-                          next.payments.push({ id: Date.now(), date: new Date().toISOString().split('T')[0], amount, method: `Credit Card (•••• ${card.last4})`, note: 'Charged to card on file', status: 'completed', linkedInvoice: null });
+                          next.payments.push({ id: Date.now(), date: toDateStr(new Date()), amount, method: `Credit Card (•••• ${card.last4})`, note: 'Charged to card on file', status: 'completed', linkedInvoice: null });
                           next.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `Credit card charge: EUR ${amount} (•••• ${card.last4})`, user: globals.currentUser?.name || 'System' });
                           setEditingReservation(next);
                           setToastMessage(`EUR ${amount} charged to •••• ${card.last4}`);
@@ -1381,13 +1381,13 @@ const DetailBillingTab = ({ dp }) => {
                         const next = JSON.parse(JSON.stringify(ed));
                         next.payments.push({
                           id: Date.now(),
-                          date: new Date().toISOString().split('T')[0],
+                          date: toDateStr(new Date()),
                           amount,
                           method: isRefund ? `Refund (${method})` : method,
                           note: isRefund ? 'Manual refund' : (isBankTransfer && !isRefund ? 'Awaiting bank transfer' : ''),
                           status: (isBankTransfer && !isRefund) ? 'pending' : 'completed',
                           confirmed: isBankTransfer && !isRefund ? false : true,
-                          confirmedDate: (isBankTransfer && !isRefund) ? null : new Date().toISOString().split('T')[0],
+                          confirmedDate: (isBankTransfer && !isRefund) ? null : toDateStr(new Date()),
                           linkedInvoice: null
                         });
                         next.activityLog.push({ id: Date.now() + 1, timestamp: Date.now(), action: `${isRefund ? 'Refund' : 'Payment'} recorded: EUR ${amount} (${method})${isBankTransfer && !isRefund ? ' — awaiting confirmation' : ''}`, user: globals.currentUser?.name || 'System' });
