@@ -1,14 +1,16 @@
 import React, { useState, useRef } from 'react';
 import globals from '../globals.js';
-import { addDays, buildFlatRoomEntries } from '../utils.js';
+import { addDays, buildFlatRoomEntries, getGuestName } from '../utils.js';
 import { getAllRooms, getRoomTypeName, canAccessPage, lsKey } from '../config.js';
 import Icons from '../icons.jsx';
 import { saveReservationSingle } from '../supabase.js';
+import { ReservationService } from '../services.js';
 
 const CalendarView = (props) => {
-  const { selectedDate, setSelectedDate, calDatePickerOpen, setCalDatePickerOpen, calendarActiveFilter, setCalendarActiveFilter, calColWidth, setCalColWidth, calViewMode, setCalViewMode, sidebarCollapsed, setSidebarCollapsed, setActivePage, activePage, setSelectedReservation, setNewReservationOpen, setToastMessage, housekeepingStatus, setPreviousPage, toggleCheckInOut } = props;
+  const { selectedDate, setSelectedDate, calDatePickerOpen, setCalDatePickerOpen, calendarActiveFilter, setCalendarActiveFilter, calColWidth, setCalColWidth, calViewMode, setCalViewMode, sidebarCollapsed, setSidebarCollapsed, setActivePage, activePage, setSelectedReservation, setNewReservationOpen, setToastMessage, housekeepingStatus, setPreviousPage, toggleCheckInOut, setReservationTab, cloudStatus } = props;
 
     const dayNames = ['ZO', 'MA', 'DI', 'WO', 'DO', 'VR', 'ZA'];
+    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     const todayDate = new Date();
 
     // Build flat room entries: 1 entry per room (multi-room reservations exploded)
@@ -29,7 +31,7 @@ const CalendarView = (props) => {
 
     // Week view: 7 days starting Monday; Month view: 30 days starting yesterday
     const getMonday = (d) => { const day = d.getDay(); const diff = (day === 0 ? -6 : 1) - day; return addDays(d, diff); };
-    const calDaysCount = calViewMode === 'week' ? 7 : 30;
+    const calDaysCount = calViewMode === 'week' ? 7 : 21;
     const calStart = calViewMode === 'week' ? getMonday(selectedDate) : addDays(selectedDate, -1);
     const days = Array.from({length: calDaysCount}, (_, i) => addDays(calStart, i));
 
@@ -386,21 +388,20 @@ const CalendarView = (props) => {
               </>)}
             </div>
           </div>
-          <div className="cal-nav-footer">
-            {!sidebarCollapsed && (
-              <>
-                Rumo &copy;<br/>All Rights Reserved
-              </>
-            )}
-          </div>
+          <div className="cal-nav-footer">{!sidebarCollapsed && (<>Rumo &copy; <span className={`inline-block w-1.5 h-1.5 rounded-full align-middle ${cloudStatus === 'idle' ? 'bg-emerald-400' : cloudStatus === 'syncing' ? 'bg-amber-400 animate-pulse' : cloudStatus === 'error' ? 'bg-red-400' : 'bg-neutral-300'}`} title={cloudStatus === 'idle' ? 'Cloud synced' : cloudStatus === 'syncing' ? 'Syncing...' : cloudStatus === 'error' ? 'Sync error' : 'Offline'} /><br/>All Rights Reserved</>)}</div>
         </aside>
-        <div className="cal-view">
-        <div className="flex items-center justify-between pl-5 pr-[93px] py-2.5 border-b border-neutral-200 bg-white flex-shrink-0">
+        <div className="p-4 md:p-8 overflow-hidden flex flex-col">
+        <div className="max-w-7xl mx-auto w-full flex flex-col flex-1 min-h-0">
+        <div className="cal-title mb-4">
+            <h2>Reservations</h2>
+            <p>Overview of all rooms and upcoming reservations</p>
+        </div>
+        <div className="flex items-center justify-between py-2.5 mb-4 flex-shrink-0">
           <div className="flex items-center gap-4">
             <div className="flex gap-2">
               {filterTabs.map(tab => (
                 <button key={tab.id}
-                  className={`px-3 py-1 text-xs font-medium rounded-lg transition-all duration-200 ${
+                  className={`px-3 py-1.5 md:px-4 md:py-2 text-xs md:text-sm font-medium rounded-xl transition-all duration-200 ${
                     calendarActiveFilter === tab.id
                       ? 'bg-neutral-900 text-white'
                       : 'text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100'
@@ -420,27 +421,27 @@ const CalendarView = (props) => {
               overflow: 'hidden',
               borderColor: calViewMode === 'month' ? '' : 'transparent',
             }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-neutral-400" style={{flexShrink:0}}>
-                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="w-3.5 h-3.5 text-neutral-400" style={{flexShrink:0}}>
+                <path d="M18 12H6M21 12l-3-3m3 3l-3 3M3 12l3-3m-3 3l3 3"/>
               </svg>
               <input type="range" min="60" max="250" value={calColWidth} onChange={(e) => setCalColWidth(Number(e.target.value))}
-                className="w-40 h-1 accent-neutral-800" title={`Column width: ${calColWidth}px`} />
+                className="cal-slider" title={`Column width: ${calColWidth}px`} />
             </div>
-            <div className="relative flex bg-neutral-100 rounded-lg p-0.5" style={{minWidth: '106px'}}>
-              <div className="absolute top-0.5 bottom-0.5 bg-white rounded-md shadow-sm" style={{
+            <div className="relative flex bg-neutral-100 rounded-xl p-0.5" style={{minWidth: '120px'}}>
+              <div className="absolute top-0.5 bottom-0.5 bg-white rounded-lg shadow-sm" style={{
                 width: 'calc(50% - 2px)',
                 left: calViewMode === 'week' ? '2px' : 'calc(50%)',
                 transition: 'left 250ms cubic-bezier(0.4, 0, 0.2, 1)',
               }} />
               <button onClick={() => { setCalViewMode('week'); try { localStorage.setItem(lsKey('calViewMode'), 'week'); } catch(e) {} }}
-                className="relative z-10 px-2.5 py-1 text-xs font-medium rounded-md transition-colors duration-200"
+                className="relative z-10 px-3 py-1.5 md:px-4 md:py-2 text-xs md:text-sm font-medium rounded-lg transition-colors duration-200"
                 style={{ color: calViewMode === 'week' ? '#171717' : '#737373', flex: 1 }}>
                 Week
               </button>
               <button onClick={() => { setCalViewMode('month'); try { localStorage.setItem(lsKey('calViewMode'), 'month'); } catch(e) {} }}
-                className="relative z-10 px-2.5 py-1 text-xs font-medium rounded-md transition-colors duration-200"
+                className="relative z-10 px-3 py-1.5 md:px-4 md:py-2 text-xs md:text-sm font-medium rounded-lg transition-colors duration-200"
                 style={{ color: calViewMode === 'month' ? '#171717' : '#737373', flex: 1 }}>
-                Month
+                Custom
               </button>
             </div>
           <div className="cal-date-nav" style={{ marginBottom: 0, position: 'relative' }}>
@@ -521,6 +522,7 @@ const CalendarView = (props) => {
                 <div key={i} className={`cal-head-cell${day.toDateString() === todayDate.toDateString() ? ' today' : ''}${isWeekend ? ' weekend' : ''}`}>
                   <div className="head-day">{dayNames[day.getDay()]}</div>
                   <div className="head-num">{day.getDate()}</div>
+                  <div className="head-month">{monthNames[day.getMonth()]}</div>
                 </div>
               );
             })}
@@ -558,12 +560,15 @@ const CalendarView = (props) => {
                     const span = res && chipStatus ? getChipSpan(res, i) : 1;
                     // Chip overlap: extend a few px past gridlines at check-in/check-out
                     const chipStyle = {};
+                    let chipExtra = '';
                     if (res && chipStatus) {
                       const isRealStart = res.checkin && res.checkin.toDateString() === day.toDateString();
                       const daysTotal = res.checkout ? Math.ceil((res.checkout - day) / 86400000) : 1;
                       const isRealEnd = span >= daysTotal;
                       const OV = 5;
                       if (isRealStart && i > 0) chipStyle.left = `${4 + OV}px`;
+                      if (!isRealStart) chipExtra += ' continues-left';
+                      if (!isRealEnd) chipExtra += ' continues-right';
                       if (span > 1) {
                         chipStyle.right = `calc(${-(span - 1) * 100}%${isRealEnd ? ` - ${OV}px` : ''})`;
                       } else if (isRealEnd) {
@@ -583,7 +588,7 @@ const CalendarView = (props) => {
                           }
                         }}>
                         {res && chipStatus && (
-                          <div className={`res-chip ${chipStatus}`} style={chipStyle}
+                          <div className={`res-chip ${chipStatus}${chipExtra}`} style={chipStyle}
                             draggable="true"
                             data-res-id={res.rooms && res.rooms.length > 1 ? res.id : undefined}
                             onDragStart={(e) => { e.stopPropagation(); handleChipDragStart(e, res); }}
@@ -595,14 +600,7 @@ const CalendarView = (props) => {
                             onMouseLeave={() => { if (res.rooms && res.rooms.length > 1) clearGroup(); }}
                             onClick={() => { setPreviousPage(activePage); setSelectedReservation(res); }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
-                              <div className="res-name" style={{ flex: 1 }}>{chipStatus === 'blocked' ? (res.blockReason || 'Blocked') : res.guest}
-                                {chipStatus !== 'blocked' && res.paidPercentage !== undefined && res.paidPercentage < 1 && (
-                                  <span style={{
-                                    display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%',
-                                    backgroundColor: res.paidPercentage === 0 ? '#ef4444' : '#f59e0b',
-                                    marginLeft: '4px', verticalAlign: 'middle'
-                                  }} />
-                                )}
+                              <div className="res-name" style={{ flex: 1 }}>{chipStatus === 'blocked' ? (res.blockReason || 'Blocked') : getGuestName(res)}
                                 {chipStatus === 'option' && res.optionExpiry && (() => {
                                   const exp = new Date(res.optionExpiry);
                                   const diff = exp - todayDate;
@@ -629,28 +627,49 @@ const CalendarView = (props) => {
                                 const isCheckedOutToday = isDepartingToday && chipStatus === 'checkedout';
                                 const showChip = canCheckIn || canCheckOut || isCheckedInToday || isCheckedOutToday;
                                 if (!showChip) return null;
+                                // Payment status: compute from room prices + extras (same as billing page)
+                                const totalPaid = (res.payments || []).filter(p => p.status === 'completed').reduce((s, p) => s + (p.amount || 0), 0);
+                                const roomTotal = (res.rooms || []).reduce((sum, rm) => {
+                                  if (rm.priceType === 'fixed') return sum + (rm.fixedPrice || 0);
+                                  return sum + (rm.nightPrices || []).reduce((s, n) => s + (n.amount || 0), 0);
+                                }, 0);
+                                const extrasTotal = (res.extras || []).reduce((sum, ex) => sum + (ex.quantity || 0) * (ex.unitPrice || 0), 0);
+                                const totalPrice = roomTotal + extrasTotal;
+                                const pp = totalPrice > 0 ? totalPaid / totalPrice : (totalPaid > 0 ? 1 : 0);
+                                const payClass = pp >= 1 ? 'pay-paid' : pp > 0 ? 'pay-partial' : 'pay-unpaid';
                                 if (canCheckIn) return (
                                   <button onClick={(e) => { e.stopPropagation(); toggleCheckInOut(res.id, false); }}
-                                    className="chip-badge badge-checkin" title="Check in">
+                                    className={`chip-badge badge-checkin ${payClass}`} title="Check in">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
                                     IN
                                   </button>
                                 );
                                 if (canCheckOut) return (
-                                  <button onClick={(e) => { e.stopPropagation(); toggleCheckInOut(res.id, true); }}
-                                    className="chip-badge badge-checkout" title="Check out">
+                                  <button onClick={(e) => {
+                                    e.stopPropagation();
+                                    // Check billing BEFORE checkout (avoids timing issues with state updates)
+                                    const billingWarning = ReservationService.validateCheckout(res);
+                                    toggleCheckInOut(res.id, true);
+                                    // If billing not fully settled → open billing page with updated status
+                                    if (billingWarning) {
+                                      setPreviousPage(activePage);
+                                      setSelectedReservation({ ...res, reservationStatus: 'checked-out', isCheckedOut: true });
+                                      setReservationTab('billing');
+                                    }
+                                  }}
+                                    className={`chip-badge badge-checkout ${payClass}`} title="Check out">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
                                     OUT
                                   </button>
                                 );
                                 if (isCheckedInToday) return (
-                                  <span className="chip-badge badge-done-in">
+                                  <span className={`chip-badge badge-done-in ${payClass}`}>
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
                                     IN
                                   </span>
                                 );
                                 if (isCheckedOutToday) return (
-                                  <span className="chip-badge badge-done-out">
+                                  <span className={`chip-badge badge-done-out ${payClass}`}>
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
                                     OUT
                                   </span>
@@ -686,6 +705,7 @@ const CalendarView = (props) => {
             )}
           </div>
         </div>
+      </div>
       </div>
     </div>
     );

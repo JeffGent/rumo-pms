@@ -42,21 +42,21 @@ export const ReservationService = {
 
   // ── Checkout Validation ────────────────────────────────────────────────
 
-  /** Check for billing issues before checkout. Returns warning string or null. */
+  /** Check for billing issues before checkout. Returns array of warning strings or null. */
   validateCheckout(res) {
     const { totalAmount, uninvoicedAmount, paidAmount } = this.calculateBillingTotals(res);
     if (totalAmount <= 0) return null;
 
     const parts = [];
-    if (uninvoicedAmount > 0.01) parts.push(`EUR ${uninvoicedAmount.toFixed(2)} uninvoiced`);
-
     const unpaid = Math.max(0, totalAmount - paidAmount);
-    if (unpaid > 0.01) parts.push(`EUR ${unpaid.toFixed(2)} unpaid`);
+    if (unpaid > 0.01) parts.push(`EUR ${unpaid.toFixed(2)} still unpaid`);
+
+    if (uninvoicedAmount > 0.01) parts.push(`EUR ${uninvoicedAmount.toFixed(2)} not yet invoiced`);
 
     const unlinkedCount = (res.payments || []).filter(p => p.status === 'completed' && !p.linkedInvoice).length;
-    if (unlinkedCount > 0) parts.push(`${unlinkedCount} unlinked payment${unlinkedCount > 1 ? 's' : ''}`);
+    if (unlinkedCount > 0) parts.push(`${unlinkedCount} payment${unlinkedCount > 1 ? 's' : ''} not linked to invoice`);
 
-    return parts.length > 0 ? parts.join(' \u00b7 ') : null;
+    return parts.length > 0 ? parts : null;
   },
 
   // ── Status Derivation ─────────────────────────────────────────────────

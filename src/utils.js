@@ -74,6 +74,14 @@ export const buildFlatRoomEntries = (resList) => {
   return entries;
 };
 
+// Get the display name for a reservation: room guest (not booker)
+// For flat entries uses _roomData.guests[0], otherwise rooms[0].guests[0]
+export const getGuestName = (res) => {
+  const g = res._roomData?.guests?.[0] || res.rooms?.[0]?.guests?.[0];
+  if (g && (g.firstName || g.lastName)) return `${g.firstName || ''} ${g.lastName || ''}`.trim();
+  return res.guest || `${res.booker?.firstName || ''} ${res.booker?.lastName || ''}`.trim();
+};
+
 // ── Error Boundary ──────────────────────────────────────────────────────────
 // Catches render errors in child components and shows a recovery UI
 // instead of crashing the entire app with a white screen.

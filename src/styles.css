@@ -179,7 +179,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 }
 
 .cal-view {
-  background: #ffffff;
+  background: #fafafa;
   color: #111827;
   padding: 0;
   display: flex;
@@ -205,14 +205,14 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   background: transparent;
   border: 1px solid #e5e7eb;
   color: #6b7280;
-  border-radius: 10px;
-  width: 32px; height: 32px;
+  border-radius: 12px;
+  width: 36px; height: 36px;
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
   transition: 0.2s ease;
 }
 .cal-nav-btn:hover { border-color: #111827; color: #111827; box-shadow: none; }
-.cal-nav-btn svg { width: 14px; height: 14px; }
+.cal-nav-btn svg { width: 16px; height: 16px; }
 .cal-date-display {
   font-size: 0.875rem;
   color: #111827;
@@ -222,10 +222,10 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   background: transparent;
   border: 1px solid #e5e7eb;
   color: #6b7280;
-  border-radius: 10px;
-  padding: 0 0.85rem;
-  height: 32px;
-  font-size: 0.78rem;
+  border-radius: 12px;
+  padding: 0 1rem;
+  height: 36px;
+  font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
   transition: 0.2s ease;
@@ -295,10 +295,12 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 
 /* ─── Calendar Grid ──────────────────────────────────────────────────── */
 .cal-grid-wrap {
-  flex: 1;
-  overflow: auto;
-  background: #f8f8f6;
-  border-radius: 0;
+  flex: 0 1 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 1rem;
   padding: 0;
 }
 .cal-grid-wrap::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -326,14 +328,14 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 }
 .cal-head-cell .head-day { margin-bottom: 2px; }
 .cal-head-cell .head-num { font-size: 0.9rem; font-weight: 700; color: #374151; }
+.cal-head-cell .head-month { font-size: 0.6rem; font-weight: 500; color: #9ca3af; margin-top: 1px; }
 .cal-head-cell.today {
-  background: #ffffff;
+  background: #fafafb;
+  border-top: 2px solid #374151;
 }
 .cal-head-cell.today .head-num {
-  background: #111827; color: #ffffff;
-  width: 24px; height: 24px; border-radius: 50%;
-  display: inline-flex; align-items: center; justify-content: center;
-  font-size: 0.72rem; font-weight: 700;
+  color: #374151;
+  font-size: 0.9rem; font-weight: 700;
 }
 .cal-head-cell.weekend {
   background: #fafafb;
@@ -366,6 +368,8 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   background: #ffffff;
   border-bottom: 2px solid #e5e7eb;
   border-right: 2px solid #e5e7eb;
+  display: flex; align-items: center;
+  padding: 0.4rem 0.8rem;
 }
 
 /* ─── Day Cells ──────────────────────────────────────────────────────── */
@@ -376,7 +380,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   padding: 4px 2px;
   transition: background 0.1s ease;
 }
-.cal-day-cell.today-col { background: rgba(245,245,235,0.7); }
+.cal-day-cell.today-col { background: #fafafb; }
 .cal-day-cell.weekend { background: rgba(250,250,248,0.5); }
 .drag-highlight { background: rgba(59, 130, 246, 0.10) !important; box-shadow: inset 0 -2px 0 0 rgba(59,130,246,0.35); }
 .cal-select { background: rgba(59, 130, 246, 0.08) !important; }
@@ -392,7 +396,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   overflow: visible; z-index: 1;
   background: #ffffff;
   border: 1px solid #e5e7eb;
-  border-left: 3px solid #e5e7eb;
+  border-left: 2.5px solid #e5e7eb;
   box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 }
 .res-chip:hover {
@@ -400,6 +404,9 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   box-shadow: 0 4px 12px rgba(0,0,0,0.08);
   z-index: 10;
 }
+.res-chip.continues-right { border-radius: 6px 0 0 6px; border-right: none; }
+.res-chip.continues-left  { border-radius: 0 6px 6px 0; border-left: none !important; left: 0 !important; }
+.res-chip.continues-left.continues-right { border-radius: 0; }
 .res-chip-grouped {
   box-shadow: 0 0 0 1px rgba(59,130,246,0.25), 0 2px 6px rgba(0,0,0,0.05);
   z-index: 10;
@@ -409,12 +416,12 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 }
 
 /* Confirmed / Reserved */
-.res-chip.reserved { border-left-color: #3b82f6; }
+.res-chip.reserved { border-left-color: rgba(59,130,246,0.55); }
 .res-chip.reserved .res-name { color: #171717; }
 .res-chip.reserved .res-info { color: #9ca3af; }
 
 /* Checked-in */
-.res-chip.checkedin { border-left-color: #10b981; }
+.res-chip.checkedin { border-left-color: rgba(16,185,129,0.55); }
 .res-chip.checkedin .res-name { color: #171717; }
 .res-chip.checkedin .res-info { color: #9ca3af; }
 
@@ -425,7 +432,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 .res-chip.checkedout { box-shadow: none; }
 
 /* Option */
-.res-chip.option { border-left-color: #ec4899; }
+.res-chip.option { border-left-color: rgba(236,72,153,0.55); }
 .res-chip.option .res-name { color: #171717; }
 .res-chip.option .res-info { color: #9ca3af; }
 
@@ -449,10 +456,16 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   flex-shrink: 0; cursor: pointer;
 }
 .chip-badge svg { width: 9px; height: 9px; }
-.chip-badge.badge-checkin { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
-.chip-badge.badge-checkout { background: #fffbeb; color: #d97706; border: 1px solid #fde68a; }
+/* Default badge colors (paid / no payment info) */
+.chip-badge.badge-checkin { background: #f5f5f5; color: #737373; border: 1px solid #e5e7eb; }
+.chip-badge.badge-checkout { background: #f5f5f5; color: #737373; border: 1px solid #e5e7eb; }
 .chip-badge.badge-done-in { background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; cursor: default; }
 .chip-badge.badge-done-out { background: #f5f5f5; color: #9ca3af; border: 1px solid #e5e7eb; cursor: default; }
+
+/* Payment status colors on action badges */
+.chip-badge.pay-unpaid { background: #fee2e2 !important; color: #dc2626 !important; border: 1px solid #fca5a5 !important; }
+.chip-badge.pay-partial { background: #ffedd5 !important; color: #c2410c !important; border: 1px solid #fdba74 !important; }
+.chip-badge.pay-paid { background: #f5f5f5 !important; color: #737373 !important; border: 1px solid #e5e7eb !important; }
 
 /* ─── Mini Datepicker ─────────────────────────────────────────────── */
 .mini-picker { position: absolute; top: 100%; right: 0; margin-top: 6px; background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.12); padding: 12px; z-index: 50; width: 260px; }
@@ -488,3 +501,45 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   from { opacity: 0; transform: translate(-50%, 10px); }
   to { opacity: 1; transform: translate(-50%, 0); }
 }
+
+/* ─── Calendar column-width slider ───────────────────────────────── */
+.cal-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 10rem;
+  height: 3px;
+  background: #e5e7eb;
+  border-radius: 2px;
+  cursor: pointer;
+  outline: none;
+}
+.cal-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1.5px solid #d4d4d4;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.cal-slider::-webkit-slider-thumb:hover {
+  border-color: #a3a3a3;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+}
+.cal-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1.5px solid #d4d4d4;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  cursor: pointer;
+}
+.cal-slider::-moz-range-track {
+  height: 3px;
+  background: #e5e7eb;
+  border-radius: 2px;
+  border: none;
+}
+

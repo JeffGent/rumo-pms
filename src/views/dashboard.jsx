@@ -1,11 +1,11 @@
 import React from 'react';
 import globals from '../globals.js';
-import { formatDate, addDays, buildFlatRoomEntries } from '../utils.js';
+import { formatDate, addDays, buildFlatRoomEntries, getGuestName } from '../utils.js';
 import { getAllRooms, getRoomTypeName, canAccessPage } from '../config.js';
 import Icons from '../icons.jsx';
 
 const DashboardView = (props) => {
-  const { selectedDate, setSelectedDate, sidebarCollapsed, setSidebarCollapsed, activePage, setActivePage, activeFilter, setActiveFilter, checkedInRooms, totalRooms, setSelectedReservation, setPreviousPage, setNewReservationOpen, quickView, mounted, housekeepingStatus, toggleCheckInOut } = props;
+  const { selectedDate, setSelectedDate, sidebarCollapsed, setSidebarCollapsed, activePage, setActivePage, activeFilter, setActiveFilter, checkedInRooms, totalRooms, setSelectedReservation, setPreviousPage, setNewReservationOpen, quickView, mounted, housekeepingStatus, toggleCheckInOut, cloudStatus } = props;
 
   const StatusIndicator = ({ housekeeping }) => {
     if (housekeeping === 'clean') return null;
@@ -73,7 +73,7 @@ const DashboardView = (props) => {
             ) : reservation.guest ? (
               <div className={!isActive ? 'min-h-[2rem]' : ''}>
                 <div className="min-w-0">
-                  <div className="text-[0.9rem] font-medium text-neutral-900 leading-tight">{reservation.guest}</div>
+                  <div className="text-[0.9rem] font-medium text-neutral-900 leading-tight">{getGuestName(reservation)}</div>
                   <div className="flex items-center justify-between mt-1">
                     <span className="text-[0.82rem] text-neutral-500">
                       {reservation.visualStatus === 'checked-out' ? `Checked out` :
@@ -264,7 +264,7 @@ const DashboardView = (props) => {
           )}
         </div>
       </div>
-      <div className="cal-nav-footer">{!sidebarCollapsed && (<>Rumo &copy;<br/>All Rights Reserved</>)}</div>
+      <div className="cal-nav-footer">{!sidebarCollapsed && (<>Rumo &copy; <span className={`inline-block w-1.5 h-1.5 rounded-full align-middle ${cloudStatus === 'idle' ? 'bg-emerald-400' : cloudStatus === 'syncing' ? 'bg-amber-400 animate-pulse' : cloudStatus === 'error' ? 'bg-red-400' : 'bg-neutral-300'}`} title={cloudStatus === 'idle' ? 'Cloud synced' : cloudStatus === 'syncing' ? 'Syncing...' : cloudStatus === 'error' ? 'Sync error' : 'Offline'} /><br/>All Rights Reserved</>)}</div>
     </aside>
     <div className="p-4 md:p-8">
     <div className="max-w-7xl mx-auto">

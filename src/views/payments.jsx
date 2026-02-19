@@ -7,7 +7,7 @@ import { saveReservationSingle } from '../supabase.js';
 
 // ── Payments View ─────────────────────────────────────────────────────────────
 const PaymentsView = (props) => {
-  const { sidebarCollapsed, setSidebarCollapsed, activePage, setActivePage, setSelectedReservation, setPreviousPage, setToastMessage } = props;
+  const { sidebarCollapsed, setSidebarCollapsed, activePage, setActivePage, setSelectedReservation, setPreviousPage, setToastMessage, cloudStatus } = props;
 
   const [payTab, setPayTab] = React.useState('rumopay');
   const [rumoSubTab, setRumoSubTab] = React.useState('dashboard');
@@ -1505,7 +1505,7 @@ const PaymentsView = (props) => {
           </>)}
         </div>
       </div>
-      <div className="cal-nav-footer">{!sidebarCollapsed && (<>Rumo &copy;<br/>All Rights Reserved</>)}</div>
+      <div className="cal-nav-footer">{!sidebarCollapsed && (<>Rumo &copy; <span className={`inline-block w-1.5 h-1.5 rounded-full align-middle ${cloudStatus === 'idle' ? 'bg-emerald-400' : cloudStatus === 'syncing' ? 'bg-amber-400 animate-pulse' : cloudStatus === 'error' ? 'bg-red-400' : 'bg-neutral-300'}`} title={cloudStatus === 'idle' ? 'Cloud synced' : cloudStatus === 'syncing' ? 'Syncing...' : cloudStatus === 'error' ? 'Sync error' : 'Offline'} /><br/>All Rights Reserved</>)}</div>
     </aside>
   );
 

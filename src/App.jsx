@@ -30,19 +30,6 @@ import MessagesPanel from './components/messages.jsx';
 import SpotlightTour from './components/tour.jsx';
 
 // Self-contained clock — ticks independently so App doesn't re-render every second
-const HeaderClock = ({ cloudStatus }) => {
-  const [time, setTime] = useState(new Date());
-  useEffect(() => {
-    const timer = setInterval(() => setTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-  return (
-    <div className="text-xs text-neutral-500 tabular-nums flex items-center gap-1.5">
-      {time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-      <span className={`w-1.5 h-1.5 rounded-full ${cloudStatus === 'idle' ? 'bg-emerald-400' : cloudStatus === 'syncing' ? 'bg-amber-400 animate-pulse' : cloudStatus === 'error' ? 'bg-red-400' : 'bg-neutral-300'}`} title={cloudStatus === 'idle' ? 'Cloud synced' : cloudStatus === 'syncing' ? 'Syncing...' : cloudStatus === 'error' ? 'Sync error' : 'Offline'} />
-    </div>
-  );
-};
 
 const ModernHotelPMS = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(() => globals.currentUser !== null);
@@ -654,7 +641,7 @@ const ModernHotelPMS = () => {
     selectedDate, setSelectedDate, activePage, setActivePage,
     profileSelectedProfile, setProfileSelectedProfile, profileEditingProfile, setProfileEditingProfile,
     profileSourceReservation, setProfileSourceReservation, profileSourceTab, setProfileSourceTab,
-    quickView, mounted, selectedReservation, setSelectedReservation,
+    quickView, mounted, selectedReservation, setSelectedReservation, cloudStatus,
     previousPage, setPreviousPage, reservationTab, setReservationTab,
     billSelected, setBillSelected, billSplitMode, setBillSplitMode,
     billPaySelected, setBillPaySelected, billRecipientOverride, setBillRecipientOverride,
@@ -701,20 +688,14 @@ const ModernHotelPMS = () => {
         <div className="px-4 md:px-8 py-4">
           <div className="flex items-center justify-between">
             {/* Logo & Navigation Tabs */}
-            <div className="flex items-center gap-4 md:gap-8">
+            <div className="flex items-center gap-4 md:gap-10">
               {/* Mobile hamburger */}
               <button onClick={() => setMobileMenuOpen(true)} className="md:hidden p-2 -ml-2 hover:bg-neutral-100 rounded-xl transition-colors">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
               </button>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-neutral-900 rounded-2xl flex items-center justify-center">
-                  <Icons.Home className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <div className="text-sm font-semibold text-neutral-900">Rumo</div>
-                  <HeaderClock cloudStatus={cloudStatus} />
-                </div>
-              </div>
+              <a href="/" style={{ fontFamily: "'DM Serif Display', serif" }} className="text-[1.6rem] text-[#2c2418] no-underline leading-none">
+                rumo<span className="text-[#c4653a]">.</span>
+              </a>
 
               {/* Navigation Tabs - hidden on mobile */}
               <div className="hidden md:flex gap-2">
@@ -787,12 +768,9 @@ const ModernHotelPMS = () => {
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setMobileMenuOpen(false)} />
           <div className="absolute left-0 top-0 bottom-0 w-72 bg-white shadow-2xl flex flex-col animate-slideIn">
             <div className="flex items-center justify-between p-5 border-b border-neutral-100">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 bg-neutral-900 rounded-xl flex items-center justify-center">
-                  <Icons.Home className="w-4 h-4 text-white" />
-                </div>
-                <span className="text-sm font-semibold text-neutral-900">Rumo</span>
-              </div>
+              <a href="/" style={{ fontFamily: "'DM Serif Display', serif" }} className="text-[1.3rem] text-[#2c2418] no-underline leading-none">
+                rumo<span className="text-[#c4653a]">.</span>
+              </a>
               <button onClick={() => setMobileMenuOpen(false)} className="p-2 hover:bg-neutral-100 rounded-xl transition-colors">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><path d="M18 6L6 18M6 6l12 12"/></svg>
               </button>
@@ -813,8 +791,9 @@ const ModernHotelPMS = () => {
                 return (
                   <button key={tab.id} onClick={() => { setActivePage(tab.id); setSelectedReservation(null); setMobileMenuOpen(false); }}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all mb-0.5 ${
-                      activePage === tab.id ? 'bg-neutral-100 text-neutral-900 font-semibold' : 'text-neutral-500 hover:bg-neutral-50 hover:text-neutral-900'
-                    }`}>
+                      activePage === tab.id ? 'bg-neutral-100 text-neutral-900 font-semibold border-l-2' : 'text-neutral-500 hover:bg-neutral-50 hover:text-neutral-900 border-l-2 border-transparent'
+                    }`}
+                    style={activePage === tab.id ? {borderLeftColor:'#c4653a'} : undefined}>
                     <IconComp className="w-[18px] h-[18px] flex-shrink-0" width="18" height="18" />
                     {tab.label}
                   </button>
@@ -829,7 +808,7 @@ const ModernHotelPMS = () => {
                 </div>
                 <button onClick={() => { setMobileMenuOpen(false); handleLogout(); }} className="text-xs text-red-500 hover:text-red-700">Sign out</button>
               </div>
-              <div className="text-[10px] text-neutral-300">Rumo &copy; All Rights Reserved</div>
+              <div className="text-[10px] text-neutral-300">Rumo &copy; <span className={`inline-block w-1.5 h-1.5 rounded-full align-middle ${cloudStatus === 'idle' ? 'bg-emerald-400' : cloudStatus === 'syncing' ? 'bg-amber-400 animate-pulse' : cloudStatus === 'error' ? 'bg-red-400' : 'bg-neutral-300'}`} title={cloudStatus === 'idle' ? 'Cloud synced' : cloudStatus === 'syncing' ? 'Syncing...' : cloudStatus === 'error' ? 'Sync error' : 'Offline'} /> All Rights Reserved</div>
             </div>
           </div>
         </div>
@@ -994,10 +973,13 @@ const ModernHotelPMS = () => {
               )}
               <div className="flex-1 min-w-0">
                 <div className={`text-sm font-semibold ${titleColor}`}>{title}</div>
-                <div className={`text-xs ${msgColor} mt-0.5`}>{warningToast.message}</div>
+                <div className={`text-xs ${msgColor} mt-0.5`}>{Array.isArray(warningToast.message)
+                  ? warningToast.message.map((line, i) => <div key={i}>• {line}</div>)
+                  : warningToast.message
+                }</div>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
-                {!isConflict && !isSuccess && (
+                {!isConflict && !isSuccess && !(selectedReservation && reservationTab === 'billing') && (
                   <button onClick={() => {
                     const res = globals.reservations.find(r => r.id === warningToast.resId);
                     if (res) { setSelectedReservation(res); setReservationTab('billing'); }

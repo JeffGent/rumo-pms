@@ -30,6 +30,7 @@ const ReservationDetailView = (props) => {
     housekeepingStatus,
     showCheckoutWarning, setProfileSelectedProfile, setProfileEditingProfile,
     setProfileSourceReservation, setProfileSourceTab,
+    cloudStatus,
   } = props;
   const reservation = selectedReservation;
   const ed = editingReservation;
@@ -449,7 +450,7 @@ const ReservationDetailView = (props) => {
             </>)}
           </div>
         </div>
-        <div className="cal-nav-footer">{!sidebarCollapsed && (<>Rumo &copy;<br/>All Rights Reserved</>)}</div>
+        <div className="cal-nav-footer">{!sidebarCollapsed && (<>Rumo &copy; <span className={`inline-block w-1.5 h-1.5 rounded-full align-middle ${cloudStatus === 'idle' ? 'bg-emerald-400' : cloudStatus === 'syncing' ? 'bg-amber-400 animate-pulse' : cloudStatus === 'error' ? 'bg-red-400' : 'bg-neutral-300'}`} title={cloudStatus === 'idle' ? 'Cloud synced' : cloudStatus === 'syncing' ? 'Syncing...' : cloudStatus === 'error' ? 'Sync error' : 'Offline'} /><br/>All Rights Reserved</>)}</div>
       </aside>
       <div className="p-4 md:p-8 overflow-y-auto">
         <div className="max-w-7xl mx-auto">

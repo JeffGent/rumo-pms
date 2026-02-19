@@ -11,7 +11,7 @@ import { resolveTemplateVariables, buildEmailHtml, htmlToPlaintext } from '../co
 
 // ── Settings View ────────────────────────────────────────────────────────────
 const SettingsView = (props) => {
-  const { setToastMessage, sidebarCollapsed, setSidebarCollapsed, activePage, setActivePage, setSelectedReservation, currentUser } = props;
+  const { setToastMessage, sidebarCollapsed, setSidebarCollapsed, activePage, setActivePage, setSelectedReservation, currentUser, cloudStatus } = props;
 
   const [settingsTab, setSettingsTab] = useState('general');
   const [localSettings, setLocalSettings] = useState(() => JSON.parse(JSON.stringify(globals.hotelSettings)));
@@ -182,7 +182,7 @@ const SettingsView = (props) => {
           </>)}
         </div>
       </div>
-      <div className="cal-nav-footer">{!sidebarCollapsed && (<>Rumo &copy;<br/>All Rights Reserved</>)}</div>
+      <div className="cal-nav-footer">{!sidebarCollapsed && (<>Rumo &copy; <span className={`inline-block w-1.5 h-1.5 rounded-full align-middle ${cloudStatus === 'idle' ? 'bg-emerald-400' : cloudStatus === 'syncing' ? 'bg-amber-400 animate-pulse' : cloudStatus === 'error' ? 'bg-red-400' : 'bg-neutral-300'}`} title={cloudStatus === 'idle' ? 'Cloud synced' : cloudStatus === 'syncing' ? 'Syncing...' : cloudStatus === 'error' ? 'Sync error' : 'Offline'} /><br/>All Rights Reserved</>)}</div>
     </aside>
   );
 

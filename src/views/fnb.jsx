@@ -1,11 +1,11 @@
 import React from 'react';
 import globals from '../globals.js';
-import { formatDate, addDays, buildFlatRoomEntries } from '../utils.js';
+import { formatDate, addDays, buildFlatRoomEntries, getGuestName } from '../utils.js';
 import { canAccessPage } from '../config.js';
 import Icons from '../icons.jsx';
 
 const FBView = (props) => {
-  const { selectedDate, setSelectedDate, fbTab, setFbTab, sidebarCollapsed, setSidebarCollapsed, activePage, setActivePage, setSelectedReservation, setPreviousPage } = props;
+  const { selectedDate, setSelectedDate, fbTab, setFbTab, sidebarCollapsed, setSidebarCollapsed, activePage, setActivePage, setSelectedReservation, setPreviousPage, cloudStatus } = props;
 
   const selectedDateMidnight = new Date(selectedDate);
   selectedDateMidnight.setHours(0, 0, 0, 0);
@@ -111,7 +111,7 @@ const FBView = (props) => {
             </>)}
           </div>
         </div>
-        <div className="cal-nav-footer">{!sidebarCollapsed && (<>Rumo &copy;<br/>All Rights Reserved</>)}</div>
+        <div className="cal-nav-footer">{!sidebarCollapsed && (<>Rumo &copy; <span className={`inline-block w-1.5 h-1.5 rounded-full align-middle ${cloudStatus === 'idle' ? 'bg-emerald-400' : cloudStatus === 'syncing' ? 'bg-amber-400 animate-pulse' : cloudStatus === 'error' ? 'bg-red-400' : 'bg-neutral-300'}`} title={cloudStatus === 'idle' ? 'Cloud synced' : cloudStatus === 'syncing' ? 'Syncing...' : cloudStatus === 'error' ? 'Sync error' : 'Offline'} /><br/>All Rights Reserved</>)}</div>
       </aside>
       <div className="p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
@@ -190,7 +190,7 @@ const FBView = (props) => {
                   <div className="text-lg md:text-xl font-medium text-neutral-900 w-12 md:w-16 flex-shrink-0 font-serif">{res.room}</div>
                   <div className="h-10 w-px bg-neutral-200 hidden md:block" />
                   <div className="min-w-0">
-                    <div className="text-sm font-medium text-neutral-900 truncate">{res.guest}</div>
+                    <div className="text-sm font-medium text-neutral-900 truncate">{getGuestName(res)}</div>
                     <div className="text-xs text-neutral-500 truncate">{res.guestCount} {res.guestCount === 1 ? 'guest' : 'guests'} · {formatDate(res.checkin)} - {formatDate(res.checkout)}</div>
                   </div>
                 </div>

@@ -6,7 +6,7 @@ import { addDays, noTypeDateKey } from '../utils.js';
 
 // ── Reports View ─────────────────────────────────────────────────────────────
 const ReportsView = (props) => {
-  const { sidebarCollapsed, setSidebarCollapsed, activePage, setActivePage, setSelectedReservation, setPreviousPage } = props;
+  const { sidebarCollapsed, setSidebarCollapsed, activePage, setActivePage, setSelectedReservation, setPreviousPage, cloudStatus } = props;
 
     const [reportTab, setReportTab] = useState('reservations');
     const [dateRange, setDateRange] = useState('thisMonth');
@@ -947,7 +947,7 @@ const ReportsView = (props) => {
             </>)}
           </div>
         </div>
-        <div className="cal-nav-footer">{!sidebarCollapsed && (<>Rumo &copy;<br/>All Rights Reserved</>)}</div>
+        <div className="cal-nav-footer">{!sidebarCollapsed && (<>Rumo &copy; <span className={`inline-block w-1.5 h-1.5 rounded-full align-middle ${cloudStatus === 'idle' ? 'bg-emerald-400' : cloudStatus === 'syncing' ? 'bg-amber-400 animate-pulse' : cloudStatus === 'error' ? 'bg-red-400' : 'bg-neutral-300'}`} title={cloudStatus === 'idle' ? 'Cloud synced' : cloudStatus === 'syncing' ? 'Syncing...' : cloudStatus === 'error' ? 'Sync error' : 'Offline'} /><br/>All Rights Reserved</>)}</div>
       </aside>
     );
 

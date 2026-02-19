@@ -7,7 +7,7 @@ import {
 } from './config.js';
 
 // Data version — increment to force regeneration when model changes
-export const DATA_VERSION = 35;
+export const DATA_VERSION = 52;
 
 // ── Reservation Generator ───────────────────────────────────────────────────
 const generateReservations = () => {
@@ -224,6 +224,8 @@ const generateReservations = () => {
   };
 
   // Phase 1: Fill rooms sequentially targeting ~30% occupancy
+  // Gap zone: 2 days before and after today are kept empty for demo clarity
+  const gapFrom = -2, gapTo = 3;
   rooms.forEach(room => {
     let currentDay = -30;
     while (currentDay < 30) {
@@ -231,6 +233,11 @@ const generateReservations = () => {
       if (currentDay >= 30) break;
       const stayLength = getRandomStayLength();
       if (currentDay + stayLength > 32) break;
+      // Skip if reservation overlaps the gap zone around today
+      if (currentDay + stayLength > gapFrom && currentDay < gapTo) {
+        currentDay = gapTo;
+        continue;
+      }
       const res = makeReservation(room, currentDay, stayLength, null);
       delete res._guestObj; delete res._bookedVia; delete res._stayPurpose;
       reservations.push(res);
@@ -292,6 +299,20 @@ const generateReservations = () => {
         blockReason: blockReasons[Math.floor(Math.random() * blockReasons.length)],
         invoices: [], activityLog: [{ id: 1, timestamp: Date.now(), action: 'Room blocked', user: 'System' }], reminders: [], updatedAt: Date.now()
       });
+    }
+  });
+
+  // Ensure a mix of payment statuses for arriving reservations (demo purposes)
+  const payMix = [1, 0.5, 0, 1, 0.3, 0, 1, 0.7, 0];
+  let payIdx = 0;
+  reservations.forEach(r => {
+    if (r.reservationStatus === 'confirmed' && r.rooms?.[0]?.checkin) {
+      const ci = new Date(r.rooms[0].checkin);
+      const diff = Math.round((ci - today) / 86400000);
+      if (diff >= 0 && diff <= 7) {
+        r.paidPercentage = payMix[payIdx % payMix.length];
+        payIdx++;
+      }
     }
   });
 
